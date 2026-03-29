@@ -19,7 +19,7 @@ export default function App() {
     formData.append("file", file);
 
     try {
-      const res = await fetch("http://10.34.158.217:8000/predict", {
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/predict`, {
         method: "POST",
         body: formData,
       });
