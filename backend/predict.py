@@ -6,17 +6,27 @@ import io
 
 # Smart import — works on both local PC and Render server
 try:
-    import tflite_runtime.interpreter as tflite
+    from ai_edge_litert.interpreter import Interpreter as tflite_Interpreter
+    def get_interpreter(model_path):
+        interp = tflite_Interpreter(model_path=model_path)
+        return interp
 except ImportError:
-    import tensorflow as tf
-    tflite = tf.lite
+    try:
+        import tflite_runtime.interpreter as tflite
+        def get_interpreter(model_path):
+            return tflite.Interpreter(model_path=model_path)
+    except ImportError:
+        import tensorflow as tf
+        def get_interpreter(model_path):
+            return tf.lite.Interpreter(model_path=model_path)
+
 
 # Load model and class names once on startup
 BASE = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE, "model", "model.tflite")
 CLASSES_PATH = os.path.join(BASE, "model", "class_names.json")
 
-interpreter = tflite.Interpreter(model_path=MODEL_PATH)
+interpreter = get_interpreter(MODEL_PATH)
 interpreter.allocate_tensors()
 
 input_details = interpreter.get_input_details()
