@@ -1,121 +1,143 @@
 import ChatBox from "./ChatBox";
+
+const SEVERITY_STYLES = {
+  None: { bg: "#e8f5e9", color: "#2e7d32", label: "Healthy" },
+  Mild: { bg: "#fff8e1", color: "#f57f17", label: "Mild" },
+  Moderate: { bg: "#fff3e0", color: "#e65100", label: "Moderate" },
+  Severe: { bg: "#fce4ec", color: "#b71c1c", label: "Severe" },
+  Unknown: { bg: "#f5f5f5", color: "#616161", label: "Unknown" },
+};
+
+const INFO_ROWS = [
+  { icon: "🔬", key: "cause", label: "Cause" },
+  { icon: "👁️", key: "symptoms", label: "Symptoms" },
+  { icon: "🌿", key: "organic_cure", label: "Organic Treatment", highlight: "green" },
+  { icon: "💊", key: "chemical_cure", label: "Chemical Treatment", highlight: "blue" },
+  { icon: "🛡️", key: "prevention", label: "Prevention" },
+  { icon: "⏱️", key: "recovery_time", label: "Recovery Time" },
+];
+
 export default function ResultCard({ result, preview, onReset }) {
-  const severityColor = {
-    None: "bg-green-100 text-green-700",
-    Mild: "bg-yellow-100 text-yellow-700",
-    Moderate: "bg-orange-100 text-orange-700",
-    Severe: "bg-red-100 text-red-700",
-    Unknown: "bg-gray-100 text-gray-600",
-  };
+  const sev = SEVERITY_STYLES[result.severity] || SEVERITY_STYLES.Unknown;
+  const headerBg = result.is_healthy
+    ? "linear-gradient(135deg, #1b5e20, #2e7d32)"
+    : "linear-gradient(135deg, #7f0000, #b71c1c)";
 
   return (
-    <div className="space-y-4">
-      {/* Top result card */}
-      <div className={`rounded-2xl p-5 shadow-sm border ${
-        result.is_healthy
-          ? "bg-green-50 border-green-200"
-          : "bg-red-50 border-red-200"
-      }`}>
-        <div className="flex items-start gap-4">
+    <div>
+      {/* Disease header */}
+      <div style={{ background: headerBg, padding: "20px 20px 24px" }}>
+        <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
           {preview && (
-            <img
-              src={preview}
-              alt="leaf"
-              className="w-20 h-20 rounded-xl object-cover flex-shrink-0"
-            />
+            <img src={preview} alt="leaf" style={{
+              width: 64, height: 64, borderRadius: 14, objectFit: "cover",
+              flexShrink: 0, border: "2px solid rgba(255,255,255,0.2)"
+            }} />
           )}
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-2xl">{result.is_healthy ? "✅" : "⚠️"}</span>
-              <span className="font-bold text-lg text-gray-800">
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+              <span style={{ fontSize: 18 }}>{result.is_healthy ? "✅" : "⚠️"}</span>
+              <span style={{ fontFamily: "'Fraunces', serif", color: "#fff", fontSize: 19, fontWeight: 600 }}>
                 {result.crop}
               </span>
             </div>
-            <p className={`text-base font-semibold ${
-              result.is_healthy ? "text-green-700" : "text-red-700"
-            }`}>
+            <p style={{ color: result.is_healthy ? "#a5d6a7" : "#ef9a9a", fontSize: 14, margin: "0 0 10px", fontWeight: 500 }}>
               {result.disease}
             </p>
-            <div className="flex items-center gap-2 mt-2">
-              <span className="text-xs bg-white border border-gray-200 px-2 py-1 rounded-full text-gray-600">
-                Confidence: {result.confidence}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <span style={{
+                background: "rgba(255,255,255,0.15)", color: "#fff",
+                fontSize: 11, padding: "3px 10px", borderRadius: 20
+              }}>
+                {result.confidence} confidence
               </span>
-              <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                severityColor[result.severity] || severityColor.Unknown
-              }`}>
-                {result.severity === "None" ? "Healthy" : result.severity}
+              <span style={{
+                background: sev.bg, color: sev.color,
+                fontSize: 11, padding: "3px 10px", borderRadius: 20, fontWeight: 500
+              }}>
+                {sev.label}
               </span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Details */}
-      {!result.is_healthy && (
-        <>
-          <InfoRow icon="🔬" label="Cause" value={result.cause} />
-          <InfoRow icon="👁️" label="Symptoms" value={result.symptoms} />
-          <InfoRow icon="🌿" label="Organic Treatment" value={result.organic_cure} color="green" />
-          <InfoRow icon="💊" label="Chemical Treatment" value={result.chemical_cure} color="blue" />
-          <InfoRow icon="🛡️" label="Prevention" value={result.prevention} />
-          <InfoRow icon="⏱️" label="Recovery Time" value={result.recovery_time} />
-        </>
-      )}
-
-      {result.is_healthy && (
-        <div className="bg-green-50 rounded-2xl p-5 border border-green-200">
-          <p className="text-green-700 font-semibold mb-1">🎉 Great news!</p>
-          <p className="text-gray-600 text-sm">{result.prevention}</p>
-        </div>
-      )}
-
-      {/* Top predictions */}
-      <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-        <p className="text-xs font-semibold text-gray-500 uppercase mb-3">
-          Top Predictions
-        </p>
-        {result.top_predictions?.map((p, i) => (
-          <div key={i} className="flex items-center justify-between py-1">
-            <span className="text-sm text-gray-700">{p.disease}</span>
-            <span className={`text-xs font-medium ${
-              i === 0 ? "text-green-600" : "text-gray-400"
-            }`}>
-              {p.confidence}
-            </span>
+      {/* Info rows */}
+      <div style={{ padding: "0 20px" }}>
+        {result.is_healthy ? (
+          <div style={{
+            background: "#f1f8f1", borderRadius: 16, padding: "16px 18px",
+            margin: "16px 0", borderLeft: "4px solid #2d8a4e"
+          }}>
+            <p style={{ color: "#1b5e20", fontWeight: 500, margin: "0 0 4px" }}>🎉 Great news!</p>
+            <p style={{ color: "#444", fontSize: 13, lineHeight: 1.5, margin: 0 }}>{result.prevention}</p>
           </div>
-        ))}
+        ) : (
+          INFO_ROWS.map(({ icon, key, label, highlight }) => (
+            result[key] && result[key] !== "Not required" && (
+              <div key={key} style={{
+                display: "flex", gap: 12, padding: "13px 0",
+                borderBottom: "1px solid #f5f5f5", alignItems: "flex-start"
+              }}>
+                <span style={{ fontSize: 16, marginTop: 1, flexShrink: 0 }}>{icon}</span>
+                <div style={{ flex: 1 }}>
+                  <p style={{
+                    fontSize: 9, fontWeight: 500, letterSpacing: "0.1em",
+                    textTransform: "uppercase", color: "#bbb", margin: "0 0 3px"
+                  }}>{label}</p>
+                  <p style={{
+                    fontSize: 13, color: highlight === "green" ? "#1b5e20" : highlight === "blue" ? "#0d47a1" : "#333",
+                    lineHeight: 1.5, margin: 0,
+                    background: highlight === "green" ? "#f1f8f1" : highlight === "blue" ? "#e3f2fd" : "transparent",
+                    padding: highlight ? "6px 10px" : 0,
+                    borderRadius: highlight ? 8 : 0
+                  }}>{result[key]}</p>
+                </div>
+              </div>
+            )
+          ))
+        )}
+
+        {/* Top predictions */}
+        {result.top_predictions && (
+          <div style={{ padding: "14px 0" }}>
+            <p style={{
+              fontSize: 9, fontWeight: 500, letterSpacing: "0.1em",
+              textTransform: "uppercase", color: "#bbb", marginBottom: 10
+            }}>Top predictions</p>
+            {result.top_predictions.map((p, i) => (
+              <div key={i} style={{
+                display: "flex", justifyContent: "space-between",
+                alignItems: "center", padding: "5px 0"
+              }}>
+                <span style={{ fontSize: 12, color: "#666" }}>{p.disease}</span>
+                <span style={{
+                  fontSize: 12, fontWeight: 500,
+                  color: i === 0 ? "#2d8a4e" : "#bbb"
+                }}>{p.confidence}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-      {/* Live Chat */}
-<ChatBox
-  disease={result.disease}
-  crop={result.crop}
-  is_healthy={result.is_healthy}
-/>
 
-      {/* Reset button */}
-      <button
-        onClick={onReset}
-        className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-xl shadow-md transition-colors"
-      >
-        📸 Diagnose Another Crop
-      </button>
-    </div>
-  );
-}
+      {/* Chat */}
+      <div style={{ padding: "8px 20px 20px" }}>
+        <ChatBox disease={result.disease} crop={result.crop} is_healthy={result.is_healthy} />
+      </div>
 
-function InfoRow({ icon, label, value, color }) {
-  const bg = color === "green"
-    ? "bg-green-50 border-green-100"
-    : color === "blue"
-    ? "bg-blue-50 border-blue-100"
-    : "bg-white border-gray-100";
-
-  return (
-    <div className={`rounded-xl p-4 border shadow-sm ${bg}`}>
-      <p className="text-xs font-semibold text-gray-500 uppercase mb-1">
-        {icon} {label}
-      </p>
-      <p className="text-sm text-gray-700 leading-relaxed">{value}</p>
+      {/* Reset */}
+      <div style={{ padding: "0 20px 24px" }}>
+        <button onClick={onReset} style={{
+          width: "100%", padding: "15px",
+          background: "linear-gradient(135deg, #1a5c30, #2d8a4e)",
+          color: "#fff", border: "none", borderRadius: 14, fontSize: 14,
+          fontWeight: 500, cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
+          boxShadow: "0 6px 20px rgba(45,138,78,0.25)"
+        }}>
+          📸 Diagnose another crop
+        </button>
+      </div>
     </div>
   );
 }

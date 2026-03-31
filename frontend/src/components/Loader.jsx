@@ -1,20 +1,29 @@
 export default function Loader() {
   return (
-    <div className="text-center py-16">
-      <div className="text-5xl mb-4 animate-bounce">🔍</div>
-      <h3 className="text-lg font-semibold text-gray-700 mb-2">
-        Analysing your crop...
-      </h3>
-      <p className="text-gray-400 text-sm">AI is examining the leaf</p>
-      <div className="mt-6 flex justify-center gap-1">
-        {[0,1,2].map(i => (
-          <div
-            key={i}
-            className="w-2 h-2 bg-green-500 rounded-full animate-bounce"
-            style={{ animationDelay: `${i * 0.15}s` }}
-          />
-        ))}
+    <div style={{ padding: "56px 24px", textAlign: "center" }}>
+      <div style={{ position: "relative", width: 80, height: 80, margin: "0 auto 24px" }}>
+        <div style={{
+          position: "absolute", inset: 0, borderRadius: "50%",
+          border: "3px solid #e8f5e9",
+        }} />
+        <div style={{
+          position: "absolute", inset: 0, borderRadius: "50%",
+          border: "3px solid transparent",
+          borderTopColor: "#2d8a4e",
+          animation: "spin 1s linear infinite"
+        }} />
+        <div style={{
+          position: "absolute", inset: "50%", transform: "translate(-50%,-50%)",
+          fontSize: 28
+        }}>🌿</div>
       </div>
+      <p style={{ fontFamily: "'Fraunces', serif", fontSize: 18, color: "#1a3a22", margin: "0 0 6px" }}>
+        Analysing your crop...
+      </p>
+      <p style={{ color: "#aaa", fontSize: 13, margin: 0 }}>
+        AI is examining the leaf
+      </p>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

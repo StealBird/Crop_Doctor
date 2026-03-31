@@ -1,6 +1,13 @@
 .App {
   text-align: center;
 }
+* { box-sizing: border-box; }
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: #f5f7f5;
+  min-height: 100vh;
+}
+.font-serif { font-family: 'Fraunces', serif; }
 
 .App-logo {
   height: 40vmin;
@@ -14,7 +21,7 @@
 }
 
 .App-header {
-  background-color: #282c34;
+  background-color: #26592b;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
