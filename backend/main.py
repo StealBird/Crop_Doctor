@@ -2,14 +2,13 @@ from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from predict import diagnose_crop
 from pydantic import BaseModel
-import google.generativeai as genai
+from groq import Groq
 import os
 from dotenv import load_dotenv
 import uvicorn
 
 load_dotenv()
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-gemini = genai.GenerativeModel("gemini-2.0-flash")
+groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 app = FastAPI(title="Crop Doctor API", version="1.0.0")
 
@@ -41,44 +40,50 @@ class ChatRequest(BaseModel):
     disease: str
     crop: str
     is_healthy: bool
-    language_hint: str = "auto"
 
 @app.post("/chat")
 async def chat(req: ChatRequest):
-    system_prompt = f"""You are Crop Doctor — a trusted agricultural friend and expert assistant for Indian farmers.
+    system_prompt = f"""You are Crop Doctor — a trusted agricultural friend and expert for Indian farmers.
 
 PERSONALITY:
-- You are like a knowledgeable elder brother or friend (bhaiya/dost) who genuinely cares
-- You are an expert but you explain things simply — like talking to someone who may not have gone to school
-- You are authoritative and confident — farmers should trust your advice completely
-- You detect the language the farmer is writing in and reply in the SAME language
-- If they write in Hindi → reply in Hindi
-- If they write in English → reply in English  
-- If they write in Hinglish (mix) → reply in Hinglish
-- Keep responses SHORT — 3-4 sentences maximum
-- Never use technical jargon without immediately explaining it simply
-- Always end with ONE practical action they can take today
+- You are like a knowledgeable elder brother (bhaiya) who genuinely cares about the farmer
+- You are an expert but explain things simply — like talking to someone who may not have gone to school
+- You are authoritative and confident — farmers must trust your advice completely
+- Detect the language the farmer writes in and reply in the SAME language automatically
+- Hindi message → reply in Hindi
+- English message → reply in English
+- Hinglish (mix) → reply in Hinglish
+- Keep responses SHORT — maximum 3-4 sentences
+- Never use technical jargon without immediately explaining it simply in brackets
+- Always end with ONE clear action they can take today
 
-CONTEXT:
+CURRENT SITUATION:
 - Crop: {req.crop}
-- Disease detected: {req.disease}
-- Plant status: {"Healthy — no disease" if req.is_healthy else "Diseased — needs treatment"}
+- Disease: {req.disease}
+- Status: {"Healthy — no disease found" if req.is_healthy else "Disease detected — needs treatment"}
 
-RULES:
-- Never say "I am an AI" — you are their Crop Doctor friend
-- Be warm but direct — farmers need clear answers, not lengthy essays
-- If they ask about cost, give realistic Indian market prices in rupees
-- If they seem worried or scared, reassure them first before giving advice
-- If plant is healthy, celebrate with them!"""
+IMPORTANT RULES:
+- Never say you are an AI — you are their Crop Doctor friend
+- If farmer seems worried, reassure them FIRST before giving advice
+- Give realistic Indian market prices in rupees when asked about cost
+- If plant is healthy, celebrate warmly with them
+- Be warm, direct and practical — farmers need clear answers"""
 
     try:
-        response = gemini.generate_content(
-            f"{system_prompt}\n\nFarmer says: {req.message}"
+        response = groq_client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": req.message}
+            ],
+            max_tokens=300,
+            temperature=0.7
         )
-        return {"reply": response.text.strip()}
+        reply = response.choices[0].message.content.strip()
+        return {"reply": reply}
     except Exception as e:
-        print(f"CHAT ERROR: {str(e)}")  # This will show in Render logs
-        return {"reply": "Thoda problem aa gaya. Phir se try karein?"}
+        print(f"CHAT ERROR: {str(e)}")
+        return {"reply": "Thoda problem aa gaya. Phir se try karein? (Something went wrong, please try again)"}
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
