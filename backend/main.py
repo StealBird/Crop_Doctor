@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 import uvicorn
 
 load_dotenv()
-genai.configure(api_key=os.getenv("AIzaSyDAnzPHeRtogoPRPMhopjUt9E5wRZka324"))
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 gemini = genai.GenerativeModel("gemini-2.0-flash")
 
 app = FastAPI(title="Crop Doctor API", version="1.0.0")
