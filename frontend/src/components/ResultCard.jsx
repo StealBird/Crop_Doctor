@@ -1,3 +1,4 @@
+import ChatBox from "./ChatBox";
 export default function ResultCard({ result, preview, onReset }) {
   const severityColor = {
     None: "bg-green-100 text-green-700",
@@ -84,6 +85,12 @@ export default function ResultCard({ result, preview, onReset }) {
           </div>
         ))}
       </div>
+      {/* Live Chat */}
+<ChatBox
+  disease={result.disease}
+  crop={result.crop}
+  is_healthy={result.is_healthy}
+/>
 
       {/* Reset button */}
       <button
