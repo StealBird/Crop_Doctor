@@ -77,7 +77,8 @@ RULES:
         )
         return {"reply": response.text.strip()}
     except Exception as e:
-        return {"reply": "Thoda problem aa gaya. Phir se try karein? (Something went wrong, please try again)"}
+        print(f"CHAT ERROR: {str(e)}")  # This will show in Render logs
+        return {"reply": "Thoda problem aa gaya. Phir se try karein?"}
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
