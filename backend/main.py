@@ -1,6 +1,6 @@
 from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
-from predict import predict_disease
+from predict import diagnose_crop
 import httpx
 import os
 import json
