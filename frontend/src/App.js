@@ -1,18 +1,35 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import CameraCapture from "./components/CameraCapture";
 import ResultCard from "./components/ResultCard";
 import Loader from "./components/Loader";
 import './App.css';
-import { LanguageSelector, useTranslation } from './LanguageContext';
+import { LanguageSelector, useTranslation, useLanguage, LANGUAGE_TO_API } from './LanguageContext';
 
 const API = process.env.REACT_APP_API_URL;
 
 export default function App() {
   const t = useTranslation();
+  const { language } = useLanguage();
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [preview, setPreview] = useState(null);
+  const [serverWaking, setServerWaking] = useState(false);
+
+  // Wake up Render backend as soon as app loads (prevents cold start delay)
+  useEffect(() => {
+    const wake = async () => {
+      try {
+        setServerWaking(true);
+        await fetch(`${API}/`);
+      } catch {
+        // silent — it's fine if backend is asleep
+      } finally {
+        setServerWaking(false);
+      }
+    };
+    wake();
+  }, []);
 
   const diagnose = async (file) => {
     setLoading(true);
@@ -21,6 +38,7 @@ export default function App() {
     setPreview(URL.createObjectURL(file));
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("language", LANGUAGE_TO_API[language]); // ← sends selected language to backend
     try {
       const res = await fetch(`${API}/predict`, { method: "POST", body: formData });
       const data = await res.json();
@@ -44,14 +62,12 @@ export default function App() {
         position: "relative",
         overflow: "hidden"
       }}>
-        {/* Subtle pattern overlay */}
         <div style={{
           position: "absolute", inset: 0, opacity: 0.04,
           backgroundImage: `url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23fff' fill-opacity='1'%3E%3Cpath d='M0 40L40 0H20L0 20M40 40V20L20 40'/%3E%3C/g%3E%3C/svg%3E")`
         }} />
 
         <div style={{ maxWidth: 520, margin: "0 auto", position: "relative" }}>
-          {/* Logo row + Language selector */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <div style={{
@@ -68,11 +84,9 @@ export default function App() {
                 </div>
               </div>
             </div>
-            {/* ← Language selector lives here */}
             <LanguageSelector />
           </div>
 
-          {/* Hero text */}
           <h1 style={{ fontFamily: "'Fraunces', serif", color: "#fff", fontSize: 28, lineHeight: 1.2, margin: "0 0 8px" }}>
             Diagnose your crop.<br />
             <em style={{ color: "#7dd87a", fontStyle: "italic" }}>Instantly.</em>
@@ -80,6 +94,24 @@ export default function App() {
           <p style={{ color: "rgba(255,255,255,0.55)", fontSize: 13, lineHeight: 1.5, margin: 0 }}>
             38 diseases · 14 crops · Free for every farmer
           </p>
+
+          {/* Cold-start warning — only shown while pinging */}
+          {serverWaking && (
+            <div style={{
+              marginTop: 12, background: "rgba(255,255,255,0.1)",
+              borderRadius: 10, padding: "8px 14px",
+              display: "flex", alignItems: "center", gap: 8
+            }}>
+              <div style={{
+                width: 8, height: 8, borderRadius: "50%",
+                background: "#ffd54f",
+                animation: "wakepulse 1.5s infinite"
+              }} />
+              <span style={{ color: "rgba(255,255,255,0.75)", fontSize: 12 }}>
+                Starting server... first diagnosis may take ~30 seconds
+              </span>
+            </div>
+          )}
         </div>
       </header>
 
@@ -108,6 +140,8 @@ export default function App() {
       <footer style={{ textAlign: "center", paddingBottom: 24, color: "#aaa", fontSize: 12 }}>
         Crop Doctor v1.0 — Free for every farmer 🌿
       </footer>
+
+      <style>{`@keyframes wakepulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
     </div>
   );
 }
