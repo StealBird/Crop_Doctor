@@ -183,7 +183,7 @@ async def predict(
     language: str = Form(default="english"),
 ):
     image_bytes = await file.read()
-    result = predict_disease(image_bytes)
+    result = diagnose_crop(image_bytes)
 
     # Generate natural language summary (new field: ai_summary)
     summary = await generate_summary(result, language)
