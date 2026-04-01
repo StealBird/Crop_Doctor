@@ -3,10 +3,12 @@ import CameraCapture from "./components/CameraCapture";
 import ResultCard from "./components/ResultCard";
 import Loader from "./components/Loader";
 import './App.css';
+import { LanguageSelector, useTranslation } from './LanguageContext';
 
 const API = process.env.REACT_APP_API_URL;
 
 export default function App() {
+  const t = useTranslation();
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -25,7 +27,7 @@ export default function App() {
       if (data.detail) setError(data.detail);
       else setResult(data);
     } catch {
-      setError("Cannot connect to server. Please try again in a moment.");
+      setError(t('error_api_down'));
     } finally {
       setLoading(false);
     }
@@ -49,21 +51,25 @@ export default function App() {
         }} />
 
         <div style={{ maxWidth: 520, margin: "0 auto", position: "relative" }}>
-          {/* Logo */}
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-            <div style={{
-              width: 44, height: 44, background: "rgba(255,255,255,0.12)",
-              borderRadius: 14, display: "flex", alignItems: "center",
-              justifyContent: "center", fontSize: 22, backdropFilter: "blur(8px)"
-            }}>🌿</div>
-            <div>
-              <div style={{ fontFamily: "'Fraunces', serif", color: "#fff", fontSize: 20, fontWeight: 600 }}>
-                Crop Doctor
-              </div>
-              <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, letterSpacing: "0.05em", textTransform: "uppercase" }}>
-                AI Disease Detection
+          {/* Logo row + Language selector */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{
+                width: 44, height: 44, background: "rgba(255,255,255,0.12)",
+                borderRadius: 14, display: "flex", alignItems: "center",
+                justifyContent: "center", fontSize: 22, backdropFilter: "blur(8px)"
+              }}>🌿</div>
+              <div>
+                <div style={{ fontFamily: "'Fraunces', serif", color: "#fff", fontSize: 20, fontWeight: 600 }}>
+                  {t('app_title')}
+                </div>
+                <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                  AI Disease Detection
+                </div>
               </div>
             </div>
+            {/* ← Language selector lives here */}
+            <LanguageSelector />
           </div>
 
           {/* Hero text */}
@@ -92,7 +98,7 @@ export default function App() {
                 background: "#2d8a4e", color: "#fff", border: "none",
                 padding: "12px 28px", borderRadius: 12, fontSize: 14,
                 fontFamily: "'DM Sans', sans-serif", cursor: "pointer"
-              }}>Try Again</button>
+              }}>{t('error_try_again')}</button>
             </div>
           )}
           {result && <ResultCard result={result} preview={preview} onReset={reset} />}

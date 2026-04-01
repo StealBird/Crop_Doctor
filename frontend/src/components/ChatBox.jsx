@@ -1,68 +1,105 @@
 import { useState, useRef, useEffect } from "react";
-
+import { useLanguage, LANGUAGE_TO_API } from '../LanguageContext';
+ 
 const API = process.env.REACT_APP_API_URL;
-
-const LANGUAGES = {
-  EN: { label: "English", send: "Send", placeholder: "Ask anything...", code: "english" },
-  HI: { label: "हिंदी", send: "भेजो", placeholder: "कुछ भी पूछो...", code: "hindi" },
-  MR: { label: "मराठी", send: "पाठवा", placeholder: "काहीही विचारा...", code: "marathi" },
-  HL: { label: "Hinglish", send: "Bhejo", placeholder: "Kuch bhi poochho...", code: "hinglish" },
+ 
+// Quick-suggestion chips per language
+const SUGGESTIONS = {
+  english: {
+    healthy: ["How to maintain health?", "Suggest fertilizer", "Next season tips"],
+    disease: ["Where to buy medicine?", "Any organic option?", "How many days to recover?", "What's the cost?"],
+  },
+  hindi: {
+    healthy: ["स्वास्थ्य कैसे बनाए रखें?", "उर्वरक सुझाएं", "अगले सीजन के टिप्स"],
+    disease: ["दवाई कहाँ मिलेगी?", "कोई जैविक उपाय?", "कितने दिन में ठीक होगा?", "खर्चा कितना आएगा?"],
+  },
+  marathi: {
+    healthy: ["आरोग्य कसे राखावे?", "खत सुचवा", "पुढील हंगामाच्या टिप्स"],
+    disease: ["औषध कुठे मिळेल?", "सेंद्रिय पर्याय आहे का?", "किती दिवसांत बरे होईल?", "खर्च किती येईल?"],
+  },
+  hinglish: {
+    healthy: ["Health kaise maintain karein?", "Fertilizer suggest karo", "Next season tips do"],
+    disease: ["Yeh dawai kahan milegi?", "Organic option hai?", "Kitne din mein theek hoga?", "Kharcha kitna aayega?"],
+  },
 };
-
+ 
+// Intro messages per language
+const INTRO = {
+  english: { healthy: (crop) => `Your ${crop} is completely healthy! No disease detected. Ask me anything about how to keep it growing strong.`,
+             disease: (crop, disease) => `Hello! I'm your Crop Doctor. I've detected ${disease} in your ${crop}. Don't worry — it's treatable. Ask me anything about treatment, cost, or prevention.` },
+  hindi:   { healthy: (crop) => `आपका ${crop} पूरी तरह स्वस्थ है! कोई रोग नहीं मिला। इसे मजबूत रखने के लिए कुछ भी पूछें।`,
+             disease: (crop, disease) => `नमस्ते! मैं आपका Crop Doctor हूं। आपके ${crop} में ${disease} मिला है। चिंता न करें — यह ठीक हो सकता है।` },
+  marathi: { healthy: (crop) => `तुमचा ${crop} पूर्णपणे निरोगी आहे! कोणताही रोग आढळला नाही। त्याला मजबूत ठेवण्यासाठी काहीही विचारा.`,
+             disease: (crop, disease) => `नमस्कार! मी तुमचा Crop Doctor आहे. तुमच्या ${crop} मध्ये ${disease} आढळला आहे. काळजी करू नका.` },
+  hinglish:{ healthy: (crop) => `Tumhara ${crop} bilkul healthy hai! Koi bimari nahi mili. Ise strong rakhne ke liye kuch bhi puchho.`,
+             disease: (crop, disease) => `Hello! Main tumhara Crop Doctor hoon. Tumhare ${crop} mein ${disease} mila hai. Tension mat lo — ye theek ho sakta hai.` },
+};
+ 
+// Error messages per language
+const ERROR_MSG = {
+  english:  "Something went wrong. Please try again.",
+  hindi:    "कुछ समस्या आई। दोबारा कोशिश करें।",
+  marathi:  "काहीतरी चूक झाली. पुन्हा प्रयत्न करा.",
+  hinglish: "Thoda problem aa gaya. Phir try karein.",
+};
+ 
+// Placeholder per language
+const PLACEHOLDER = {
+  english:  "Ask anything about this disease...",
+  hindi:    "इस रोग के बारे में कुछ भी पूछें...",
+  marathi:  "या रोगाबद्दल काहीही विचारा...",
+  hinglish: "Is bimari ke baare mein kuch bhi puchho...",
+};
+ 
+// Send button label per language
+const SEND_LABEL = {
+  english:  "Send",
+  hindi:    "भेजें",
+  marathi:  "पाठवा",
+  hinglish: "Bhejo",
+};
+ 
 export default function ChatBox({ disease, crop, is_healthy }) {
-  const [lang, setLang] = useState("EN");
-  const [showLangMenu, setShowLangMenu] = useState(false);
-  const [messages, setMessages] = useState([
-    {
-      from: "ai",
-      text: is_healthy
-        ? `Your ${crop} is completely healthy! No disease detected. Ask me anything about how to keep it growing strong.`
-        : `Hello! I'm your Crop Doctor. I've detected ${disease} in your ${crop}. Don't worry — it's treatable. Ask me anything about treatment, cost, or prevention.`
-    }
-  ]);
+  const { language } = useLanguage();
+ 
+  const getIntro = (lang) => {
+    const msgs = INTRO[lang] || INTRO.english;
+    return is_healthy ? msgs.healthy(crop) : msgs.disease(crop, disease);
+  };
+ 
+  const [messages, setMessages] = useState([{ from: "ai", text: getIntro(language) }]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef(null);
-  const langRef = useRef(null);
-
+ 
+  // When the global language changes, add a language-switch notice in chat
+  const prevLangRef = useRef(language);
+  useEffect(() => {
+    if (prevLangRef.current !== language) {
+      prevLangRef.current = language;
+      const notice = {
+        english:  "Switched to English. Ask me anything!",
+        hindi:    "हिंदी में बदल दिया। कुछ भी पूछो!",
+        marathi:  "मराठीत बदलले. काहीही विचारा!",
+        hinglish: "Hinglish mein switch kar diya. Kuch bhi poochho!",
+      };
+      setMessages(prev => [...prev, { from: "ai", text: notice[language] || notice.english }]);
+    }
+  }, [language]);
+ 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
-
-  useEffect(() => {
-    const handleClick = (e) => {
-      if (langRef.current && !langRef.current.contains(e.target)) {
-        setShowLangMenu(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
-
-  const currentLang = LANGUAGES[lang];
-
-  const suggestions = {
-    EN: is_healthy
-      ? ["How to maintain health?", "Suggest fertilizer", "Next season tips"]
-      : ["Where to buy medicine?", "Any organic option?", "How many days to recover?", "What's the cost?"],
-    HI: is_healthy
-      ? ["स्वास्थ्य कैसे बनाए रखें?", "उर्वरक सुझाएं", "अगले सीजन के टिप्स"]
-      : ["दवाई कहाँ मिलेगी?", "कोई जैविक उपाय?", "कितने दिन में ठीक होगा?", "खर्चा कितना आएगा?"],
-    MR: is_healthy
-      ? ["आरोग्य कसे राखावे?", "खत सुचवा", "पुढील हंगामाच्या टिप्स"]
-      : ["औषध कुठे मिळेल?", "सेंद्रिय पर्याय आहे का?", "किती दिवसांत बरे होईल?", "खर्च किती येईल?"],
-    HL: is_healthy
-      ? ["Health kaise maintain karein?", "Fertilizer suggest karo", "Next season tips do"]
-      : ["Yeh dawai kahan milegi?", "Organic option hai?", "Kitne din mein theek hoga?", "Kharcha kitna aayega?"],
-  };
-
+ 
+  const suggestions = (SUGGESTIONS[language] || SUGGESTIONS.english)[is_healthy ? "healthy" : "disease"];
+ 
   const send = async () => {
     if (!input.trim() || loading) return;
     const userMsg = input.trim();
     setInput("");
     setMessages(prev => [...prev, { from: "user", text: userMsg }]);
     setLoading(true);
-
+ 
     try {
       const res = await fetch(`${API}/chat`, {
         method: "POST",
@@ -72,7 +109,7 @@ export default function ChatBox({ disease, crop, is_healthy }) {
           disease,
           crop,
           is_healthy,
-          language: currentLang.code,
+          language: LANGUAGE_TO_API[language],   // ← uses global language
         }),
       });
       const data = await res.json();
@@ -80,71 +117,29 @@ export default function ChatBox({ disease, crop, is_healthy }) {
     } catch {
       setMessages(prev => [
         ...prev,
-        { from: "ai", text: lang === "HI" ? "कुछ समस्या आई। दोबारा कोशिश करें।" : lang === "MR" ? "काहीतरी चूक झाली. पुन्हा प्रयत्न करा." : lang === "HL" ? "Thoda problem aa gaya. Phir try karein." : "Something went wrong. Please try again." }
+        { from: "ai", text: ERROR_MSG[language] || ERROR_MSG.english }
       ]);
     } finally {
       setLoading(false);
     }
   };
-
+ 
   const handleKey = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       send();
     }
   };
-
-  const selectLang = (code) => {
-    setLang(code);
-    setShowLangMenu(false);
-    // Add a language switch message
-    const switchMsg = {
-      EN: "Switched to English. Ask me anything!",
-      HI: "हिंदी में बदल दिया। कुछ भी पूछो!",
-      MR: "मराठीत बदलले. काहीही विचारा!",
-      HL: "Hinglish mein switch kar diya. Kuch bhi poochho!",
-    };
-    setMessages(prev => [...prev, { from: "ai", text: switchMsg[code] }]);
-  };
-
+ 
   return (
     <div className="rounded-2xl border border-green-200 bg-white shadow-sm overflow-hidden">
-
-      {/* Header with language selector */}
+ 
+      {/* Header — no language dropdown here, it's in the App header now */}
       <div className="bg-green-700 px-4 py-3 flex items-center gap-2">
         <div className="w-2 h-2 bg-green-300 rounded-full animate-pulse"></div>
-        <span className="text-white font-semibold text-sm">Crop Doctor — Live Chat</span>
-
-        {/* Language selector */}
-        <div className="ml-auto relative" ref={langRef}>
-          <button
-            onClick={() => setShowLangMenu(!showLangMenu)}
-            className="flex items-center gap-1 bg-green-600 hover:bg-green-500 text-white text-xs px-3 py-1.5 rounded-lg transition-colors"
-          >
-            <span>{currentLang.label}</span>
-            <span className="text-green-300">▾</span>
-          </button>
-
-          {showLangMenu && (
-            <div className="absolute right-0 top-8 bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden z-50 min-w-32">
-              {Object.entries(LANGUAGES).map(([code, l]) => (
-                <button
-                  key={code}
-                  onClick={() => selectLang(code)}
-                  className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${
-                    lang === code
-                      ? "bg-green-50 text-green-700 font-semibold"
-                      : "text-gray-700 hover:bg-gray-50"
-                  }`}
-                >
-                  {l.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <span className="text-white font-semibold text-sm">🌿 Crop Doctor — Live Chat</span>
       </div>
-
+ 
       {/* Messages */}
       <div className="p-4 space-y-3 max-h-72 overflow-y-auto bg-gray-50">
         {messages.map((msg, i) => (
@@ -161,7 +156,7 @@ export default function ChatBox({ disease, crop, is_healthy }) {
             </div>
           </div>
         ))}
-
+ 
         {loading && (
           <div className="flex justify-start">
             <div className="bg-white border border-green-100 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
@@ -176,24 +171,24 @@ export default function ChatBox({ disease, crop, is_healthy }) {
         )}
         <div ref={bottomRef} />
       </div>
-
+ 
       {/* Quick suggestions */}
       <div className="px-3 py-2 flex gap-2 overflow-x-auto bg-gray-50 border-t border-gray-100">
-        {(suggestions[lang] || suggestions.EN).map((s, i) => (
+        {suggestions.map((s, i) => (
           <button key={i} onClick={() => setInput(s)}
             className="flex-shrink-0 text-xs bg-green-50 text-green-700 border border-green-200 px-3 py-1 rounded-full hover:bg-green-100 transition-colors">
             {s}
           </button>
         ))}
       </div>
-
+ 
       {/* Input */}
       <div className="p-3 bg-white border-t border-gray-100 flex gap-2">
         <input
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={handleKey}
-          placeholder={currentLang.placeholder}
+          placeholder={PLACEHOLDER[language] || PLACEHOLDER.english}
           className="flex-1 text-sm border border-gray-200 rounded-xl px-4 py-2 outline-none focus:border-green-400 focus:ring-1 focus:ring-green-400"
         />
         <button
@@ -201,7 +196,7 @@ export default function ChatBox({ disease, crop, is_healthy }) {
           disabled={loading || !input.trim()}
           className="bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors min-w-16 text-center"
         >
-          {currentLang.send}
+          {SEND_LABEL[language] || SEND_LABEL.english}
         </button>
       </div>
     </div>

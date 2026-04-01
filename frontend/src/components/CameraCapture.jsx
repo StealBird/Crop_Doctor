@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useTranslation } from '../LanguageContext';
 
 const CROPS = [
   { emoji: "🍅", name: "Tomato" }, { emoji: "🥔", name: "Potato" },
@@ -11,6 +12,7 @@ const CROPS = [
 ];
 
 export default function CameraCapture({ onCapture, preview }) {
+  const t = useTranslation();
   const cameraRef = useRef();
   const galleryRef = useRef();
   const [dragOver, setDragOver] = useState(false);
@@ -58,7 +60,7 @@ export default function CameraCapture({ onCapture, preview }) {
                 objectFit: "contain", margin: "0 auto", display: "block"
               }} />
               <p style={{ color: "#2d8a4e", fontSize: 12, marginTop: 10, fontWeight: 500 }}>
-                ✓ Photo selected — tap "Diagnose" to analyse
+                ✓ {t('upload_hint')}
               </p>
             </div>
           ) : (
@@ -70,10 +72,10 @@ export default function CameraCapture({ onCapture, preview }) {
                 fontSize: 28, boxShadow: "0 8px 24px rgba(45,138,78,0.25)"
               }}>📸</div>
               <p style={{ fontFamily: "'Fraunces', serif", fontSize: 18, color: "#1a3a22", margin: "0 0 6px" }}>
-                Tap to take photo
+                {t('take_photo')}
               </p>
               <p style={{ color: "#999", fontSize: 12, margin: 0 }}>
-                Point camera at the affected leaf · or drag & drop here
+                {t('upload_hint')}
               </p>
             </div>
           )}
@@ -97,7 +99,7 @@ export default function CameraCapture({ onCapture, preview }) {
           onMouseEnter={e => { e.target.style.borderColor = "#2d8a4e"; e.target.style.color = "#2d8a4e"; }}
           onMouseLeave={e => { e.target.style.borderColor = "#e0e0e0"; e.target.style.color = "#555"; }}
         >
-          🖼️ Upload from gallery
+          🖼️ {t('upload_photo')}
         </button>
 
         {/* Hidden gallery input */}
@@ -117,7 +119,7 @@ export default function CameraCapture({ onCapture, preview }) {
               boxShadow: "0 6px 20px rgba(45,138,78,0.3)"
             }}
           >
-            🔍 Diagnose this crop
+            🔍 {t('diagnose_button')}
           </button>
         )}
       </div>
@@ -131,7 +133,7 @@ export default function CameraCapture({ onCapture, preview }) {
           fontSize: 10, fontWeight: 500, letterSpacing: "0.1em",
           textTransform: "uppercase", color: "#aaa", marginBottom: 12
         }}>
-          Supported crops — 38 diseases detected
+          {t('supported_crops')} — 38 diseases detected
         </p>
         <div style={{
           display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8

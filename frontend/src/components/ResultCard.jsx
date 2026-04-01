@@ -1,4 +1,5 @@
 import ChatBox from "./ChatBox";
+import { useTranslation } from '../LanguageContext';
 
 const SEVERITY_STYLES = {
   None: { bg: "#e8f5e9", color: "#2e7d32", label: "Healthy" },
@@ -8,16 +9,18 @@ const SEVERITY_STYLES = {
   Unknown: { bg: "#f5f5f5", color: "#616161", label: "Unknown" },
 };
 
-const INFO_ROWS = [
-  { icon: "🔬", key: "cause", label: "Cause" },
-  { icon: "👁️", key: "symptoms", label: "Symptoms" },
-  { icon: "🌿", key: "organic_cure", label: "Organic Treatment", highlight: "green" },
-  { icon: "💊", key: "chemical_cure", label: "Chemical Treatment", highlight: "blue" },
-  { icon: "🛡️", key: "prevention", label: "Prevention" },
-  { icon: "⏱️", key: "recovery_time", label: "Recovery Time" },
-];
-
 export default function ResultCard({ result, preview, onReset }) {
+  const t = useTranslation();
+
+  const INFO_ROWS = [
+    { icon: "🔬", key: "cause",         label: t('cause') },
+    { icon: "👁️", key: "symptoms",      label: t('symptoms') },
+    { icon: "🌿", key: "organic_cure",  label: t('organic_cure'),  highlight: "green" },
+    { icon: "💊", key: "chemical_cure", label: t('chemical_cure'), highlight: "blue" },
+    { icon: "🛡️", key: "prevention",    label: t('prevention') },
+    { icon: "⏱️", key: "recovery_time", label: t('recovery_time') },
+  ];
+
   const sev = SEVERITY_STYLES[result.severity] || SEVERITY_STYLES.Unknown;
   const headerBg = result.is_healthy
     ? "linear-gradient(135deg, #1b5e20, #2e7d32)"
@@ -49,7 +52,7 @@ export default function ResultCard({ result, preview, onReset }) {
                 background: "rgba(255,255,255,0.15)", color: "#fff",
                 fontSize: 11, padding: "3px 10px", borderRadius: 20
               }}>
-                {result.confidence} confidence
+                {result.confidence} {t('confidence').toLowerCase()}
               </span>
               <span style={{
                 background: sev.bg, color: sev.color,
@@ -69,7 +72,7 @@ export default function ResultCard({ result, preview, onReset }) {
             background: "#f1f8f1", borderRadius: 16, padding: "16px 18px",
             margin: "16px 0", borderLeft: "4px solid #2d8a4e"
           }}>
-            <p style={{ color: "#1b5e20", fontWeight: 500, margin: "0 0 4px" }}>🎉 Great news!</p>
+            <p style={{ color: "#1b5e20", fontWeight: 500, margin: "0 0 4px" }}>🎉 {t('healthy_message')}</p>
             <p style={{ color: "#444", fontSize: 13, lineHeight: 1.5, margin: 0 }}>{result.prevention}</p>
           </div>
         ) : (
@@ -104,7 +107,7 @@ export default function ResultCard({ result, preview, onReset }) {
             <p style={{
               fontSize: 9, fontWeight: 500, letterSpacing: "0.1em",
               textTransform: "uppercase", color: "#bbb", marginBottom: 10
-            }}>Top predictions</p>
+            }}>{t('top_predictions')}</p>
             {result.top_predictions.map((p, i) => (
               <div key={i} style={{
                 display: "flex", justifyContent: "space-between",
@@ -135,7 +138,7 @@ export default function ResultCard({ result, preview, onReset }) {
           fontWeight: 500, cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
           boxShadow: "0 6px 20px rgba(45,138,78,0.25)"
         }}>
-          📸 Diagnose another crop
+          📸 {t('back_button')}
         </button>
       </div>
     </div>

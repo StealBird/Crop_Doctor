@@ -1,4 +1,8 @@
+import { useTranslation } from '../LanguageContext';
+ 
 export default function Loader() {
+  const t = useTranslation();
+ 
   return (
     <div style={{ padding: "56px 24px", textAlign: "center" }}>
       <div style={{ position: "relative", width: 80, height: 80, margin: "0 auto 24px" }}>
@@ -18,10 +22,10 @@ export default function Loader() {
         }}>🌿</div>
       </div>
       <p style={{ fontFamily: "'Fraunces', serif", fontSize: 18, color: "#1a3a22", margin: "0 0 6px" }}>
-        Analysing your crop...
+        {t('loading_line1')}
       </p>
       <p style={{ color: "#aaa", fontSize: 13, margin: 0 }}>
-        AI is examining the leaf
+        {t('loading_line2')}
       </p>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
