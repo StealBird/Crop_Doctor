@@ -2,11 +2,11 @@ import ChatBox from "./ChatBox";
 import { useTranslation } from '../LanguageContext';
 
 const SEVERITY_STYLES = {
-  None: { bg: "#e8f5e9", color: "#2e7d32", label: "Healthy" },
-  Mild: { bg: "#fff8e1", color: "#f57f17", label: "Mild" },
+  None:     { bg: "#e8f5e9", color: "#2e7d32", label: "Healthy" },
+  Mild:     { bg: "#fff8e1", color: "#f57f17", label: "Mild" },
   Moderate: { bg: "#fff3e0", color: "#e65100", label: "Moderate" },
-  Severe: { bg: "#fce4ec", color: "#b71c1c", label: "Severe" },
-  Unknown: { bg: "#f5f5f5", color: "#616161", label: "Unknown" },
+  Severe:   { bg: "#fce4ec", color: "#b71c1c", label: "Severe" },
+  Unknown:  { bg: "#f5f5f5", color: "#616161", label: "Unknown" },
 };
 
 export default function ResultCard({ result, preview, onReset }) {
@@ -28,7 +28,7 @@ export default function ResultCard({ result, preview, onReset }) {
 
   return (
     <div>
-      {/* Disease header */}
+      {/* ── Disease header ── */}
       <div style={{ background: headerBg, padding: "20px 20px 24px" }}>
         <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
           {preview && (
@@ -65,16 +65,54 @@ export default function ResultCard({ result, preview, onReset }) {
         </div>
       </div>
 
-      {/* Info rows */}
+      {/* ── AI Summary ── */}
+      {result.ai_summary && (
+        <div style={{
+          margin: "16px 20px 0",
+          background: result.is_healthy ? "#f1f8f1" : "#fffbf0",
+          border: `1px solid ${result.is_healthy ? "#c8e6c9" : "#ffe082"}`,
+          borderLeft: `4px solid ${result.is_healthy ? "#2d8a4e" : "#f9a825"}`,
+          borderRadius: 14,
+          padding: "14px 16px",
+        }}>
+          {/* Label */}
+          <p style={{
+            fontSize: 9, fontWeight: 600, letterSpacing: "0.1em",
+            textTransform: "uppercase",
+            color: result.is_healthy ? "#388e3c" : "#f57f17",
+            margin: "0 0 8px",
+            display: "flex", alignItems: "center", gap: 5
+          }}>
+            🤖 AI Doctor's Assessment
+          </p>
+          {/* The natural language paragraph */}
+          <p style={{
+            fontSize: 13.5, color: "#2d3436",
+            lineHeight: 1.65, margin: 0,
+            fontFamily: "'DM Sans', sans-serif"
+          }}>
+            {result.ai_summary}
+          </p>
+        </div>
+      )}
+
+      {/* ── Detail rows ── */}
       <div style={{ padding: "0 20px" }}>
         {result.is_healthy ? (
-          <div style={{
-            background: "#f1f8f1", borderRadius: 16, padding: "16px 18px",
-            margin: "16px 0", borderLeft: "4px solid #2d8a4e"
-          }}>
-            <p style={{ color: "#1b5e20", fontWeight: 500, margin: "0 0 4px" }}>🎉 {t('healthy_message')}</p>
-            <p style={{ color: "#444", fontSize: 13, lineHeight: 1.5, margin: 0 }}>{result.prevention}</p>
-          </div>
+          /* Healthy — show prevention tip only */
+          result.prevention && (
+            <div style={{
+              background: "#f1f8f1", borderRadius: 16, padding: "14px 16px",
+              margin: "14px 0", borderLeft: "4px solid #2d8a4e"
+            }}>
+              <p style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "#388e3c", margin: "0 0 6px" }}>
+                🛡️ {t('prevention')}
+              </p>
+              <p style={{ color: "#444", fontSize: 13, lineHeight: 1.5, margin: 0 }}>
+                {result.prevention}
+              </p>
+            </div>
+          )
         ) : (
           INFO_ROWS.map(({ icon, key, label, highlight }) => (
             result[key] && result[key] !== "Not required" && (
@@ -89,7 +127,8 @@ export default function ResultCard({ result, preview, onReset }) {
                     textTransform: "uppercase", color: "#bbb", margin: "0 0 3px"
                   }}>{label}</p>
                   <p style={{
-                    fontSize: 13, color: highlight === "green" ? "#1b5e20" : highlight === "blue" ? "#0d47a1" : "#333",
+                    fontSize: 13,
+                    color: highlight === "green" ? "#1b5e20" : highlight === "blue" ? "#0d47a1" : "#333",
                     lineHeight: 1.5, margin: 0,
                     background: highlight === "green" ? "#f1f8f1" : highlight === "blue" ? "#e3f2fd" : "transparent",
                     padding: highlight ? "6px 10px" : 0,
