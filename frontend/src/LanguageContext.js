@@ -1,114 +1,84 @@
 // ============================================================
 // LanguageContext.js  —  Crop Doctor Language System
-// Provides: LanguageProvider, useLanguage, useTranslation
+// Provides: LanguageProvider, useLanguage
 //
 // HOW TO USE IN ANY COMPONENT:
-//   import { useTranslation } from '../LanguageContext';
-//   const t = useTranslation();
+//   import { useLanguage } from '../LanguageContext';
+//   const { t, lang, switchLang, langCode } = useLanguage();
 //   <button>{t('diagnose_button')}</button>
+//   <button>{t('chat_healthy', { crop: 'Tomato' })}</button>
+//
+// Language codes stored: 'EN' | 'HI' | 'MR' | 'HL'
+// langCode maps to API string: 'english' | 'hindi' | 'marathi' | 'hinglish'
 // ============================================================
 
-import React, { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useState, useCallback } from 'react';
 import translations from './translations';
 
-// Supported languages — order matters (shown in dropdown)
-export const LANGUAGES = [
-  { code: 'english',  label: 'English' },
-  { code: 'hindi',    label: 'हिंदी' },
-  { code: 'marathi',  label: 'मराठी' },
-  { code: 'hinglish', label: 'Hinglish' },
-];
-
-// Map language code → API language string expected by your /chat backend
-export const LANGUAGE_TO_API = {
-  english:  'english',
-  hindi:    'hindi',
-  marathi:  'marathi',
-  hinglish: 'hinglish',
-};
-
-// ── Context ────────────────────────────────────────────────
 const LanguageContext = createContext(null);
 
-// ── Provider  ──────────────────────────────────────────────
-// Wrap your entire app with this in index.js or App.js:
-//   <LanguageProvider>
-//     <App />
-//   </LanguageProvider>
+export const LANG_OPTIONS = [
+  { code: 'EN', label: 'English',  flag: '🇬🇧' },
+  { code: 'HI', label: 'हिंदी',    flag: '🇮🇳' },
+  { code: 'MR', label: 'मराठी',    flag: '🌿' },
+  { code: 'HL', label: 'Hinglish', flag: '🤝' },
+];
+
+const LANG_API_MAP = {
+  EN: 'english',
+  HI: 'hindi',
+  MR: 'marathi',
+  HL: 'hinglish',
+};
 
 export function LanguageProvider({ children }) {
-  // Read saved language from localStorage, default to 'english'
-  const [language, setLanguage] = useState(
-    () => localStorage.getItem('cropDoctorLanguage') || 'english'
+  const [lang, setLang] = useState(
+    () => localStorage.getItem('crop_doctor_lang') || 'EN'
   );
 
-  const changeLanguage = (newLang) => {
-    setLanguage(newLang);
-    localStorage.setItem('cropDoctorLanguage', newLang);
-  };
+  const switchLang = useCallback((code) => {
+    setLang(code);
+    localStorage.setItem('crop_doctor_lang', code);
+  }, []);
+
+  // t('key') — returns translated string for current language
+  // t('key', { crop: 'Tomato' }) — replaces {crop} placeholder
+  const t = useCallback(
+    (key, vars = {}) => {
+      let text =
+        translations[lang]?.[key] ||
+        translations['EN']?.[key] ||
+        key;
+      Object.entries(vars).forEach(([k, v]) => {
+        text = text.replace(`{${k}}`, v ?? '');
+      });
+      return text;
+    },
+    [lang]
+  );
+
+  // API language string expected by /chat and /predict backends
+  const langCode = LANG_API_MAP[lang] || 'english';
 
   return (
-    <LanguageContext.Provider value={{ language, changeLanguage }}>
+    <LanguageContext.Provider value={{ lang, switchLang, t, langCode }}>
       {children}
     </LanguageContext.Provider>
   );
 }
 
-// ── Hook: useLanguage ───────────────────────────────────────
-// Returns { language, changeLanguage }
-// Use when you need to read or change the current language code.
 export function useLanguage() {
   const ctx = useContext(LanguageContext);
   if (!ctx) throw new Error('useLanguage must be used inside <LanguageProvider>');
   return ctx;
 }
 
-// ── Hook: useTranslation ────────────────────────────────────
-// Returns t(key) function.
-// t('diagnose_button')  →  "Diagnose Now" / "निदान करें" / etc.
-// t('unknown_key')      →  'unknown_key'  (safe fallback)
+// ── Backward-compat shim ────────────────────────────────────
+// Components that still call useTranslation() keep working.
 export function useTranslation() {
-  const { language } = useLanguage();
-
-  const t = (key) => {
-    const langStrings = translations[language] || translations['english'];
-    return langStrings[key] ?? translations['english'][key] ?? key;
-  };
-
+  const { t } = useLanguage();
   return t;
 }
 
-// ── LanguageSelector Component ──────────────────────────────
-// Drop-in selector for the top-right of your header.
-// Usage: <LanguageSelector />
-
-export function LanguageSelector() {
-  const { language, changeLanguage } = useLanguage();
-  const t = useTranslation();
-
-  return (
-    <div className="flex items-center gap-2">
-      <span className="text-xs text-gray-400 hidden sm:inline">
-        {t('language_label')}
-      </span>
-      <select
-        value={language}
-        onChange={(e) => changeLanguage(e.target.value)}
-        className="
-          bg-gray-800 text-white text-sm
-          border border-gray-600 rounded-lg
-          px-3 py-1.5 cursor-pointer
-          hover:border-green-500 focus:border-green-500
-          focus:outline-none transition-colors
-        "
-        aria-label={t('language_label')}
-      >
-        {LANGUAGES.map((lang) => (
-          <option key={lang.code} value={lang.code}>
-            {lang.label}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
+// ── Legacy LANGUAGE_TO_API shim ─────────────────────────────
+export const LANGUAGE_TO_API = LANG_API_MAP;

@@ -19,6 +19,58 @@ GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 TRANSLATE_FIELDS = ["cause", "symptoms", "organic_cure", "chemical_cure", "prevention", "recovery_time"]
 
+# Static crop name translations — prevents phonetic guessing by Groq
+CROP_NATIVE_NAMES = {
+    "hindi": {
+        "Tomato":      "टमाटर",
+        "Potato":      "आलू",
+        "Corn":        "मक्का",
+        "Rice":        "धान",
+        "Wheat":       "गेहूँ",
+        "Apple":       "सेब",
+        "Grape":       "अंगूर",
+        "Bell Pepper": "शिमला मिर्च",
+        "Strawberry":  "स्ट्रॉबेरी",
+        "Peach":       "आड़ू",
+        "Cherry":      "चेरी",
+        "Soybean":     "सोयाबीन",
+        "Blueberry":   "ब्लूबेरी",
+        "Orange":      "संतरा",
+    },
+    "marathi": {
+        "Tomato":      "टोमॅटो",
+        "Potato":      "बटाटा",
+        "Corn":        "मका",
+        "Rice":        "भात",
+        "Wheat":       "गहू",
+        "Apple":       "सफरचंद",
+        "Grape":       "द्राक्ष",
+        "Bell Pepper": "ढोबळी मिरची",
+        "Strawberry":  "स्ट्रॉबेरी",
+        "Peach":       "पीच",
+        "Cherry":      "चेरी",
+        "Soybean":     "सोयाबीन",
+        "Blueberry":   "ब्लूबेरी",
+        "Orange":      "संतरा",
+    },
+    "hinglish": {
+        "Tomato":      "Tamatar",
+        "Potato":      "Aloo",
+        "Corn":        "Makka",
+        "Rice":        "Chawal",
+        "Wheat":       "Gehun",
+        "Apple":       "Seb",
+        "Grape":       "Angoor",
+        "Bell Pepper": "Shimla Mirch",
+        "Strawberry":  "Strawberry",
+        "Peach":       "Aaru",
+        "Cherry":      "Cherry",
+        "Soybean":     "Soyabean",
+        "Blueberry":   "Blueberry",
+        "Orange":      "Santra",
+    },
+}
+
 
 def confidence_label(conf_str: str) -> str:
     """Convert '87.3%' to plain words like 'high certainty'."""
@@ -169,6 +221,12 @@ Input JSON:
     except Exception as e:
         print(f"Translation error: {e}")
 
+    # Apply static crop name translation (prevents phonetic guesses like 'maz')
+    native_crops = CROP_NATIVE_NAMES.get(language, {})
+    native_crop = native_crops.get(result.get("crop", ""))
+    if native_crop:
+        result["crop"] = native_crop
+
     return result
 
 
@@ -184,6 +242,10 @@ async def predict(
 ):
     image_bytes = await file.read()
     result = diagnose_crop(image_bytes)
+
+    # Surface model errors directly (e.g. not_a_crop, processing failures)
+    if "error" in result:
+        return result
 
     # Generate natural language summary (new field: ai_summary)
     summary = await generate_summary(result, language)
@@ -204,16 +266,16 @@ async def chat(body: dict):
     language   = body.get("language", "english")
 
     lang_instruction = {
-        "hindi":    "You MUST reply only in Hindi (Devanagari script).",
-        "marathi":  "You MUST reply only in Marathi (Devanagari script).",
-        "hinglish": "You MUST reply only in Hinglish (Roman script Hindi mixed with English).",
-        "english":  "Reply in English.",
-    }.get(language, "Reply in English.")
+        "hindi":    "CRITICAL: You MUST reply ONLY in Hindi using Devanagari script (हिंदी). Every word must be in Hindi. Do NOT write English sentences. Technical/chemical names may stay in English.",
+        "marathi":  "CRITICAL: You MUST reply ONLY in Marathi using Devanagari script (मराठी). Every word must be in Marathi. Do NOT write English sentences. Technical/chemical names may stay in English.",
+        "hinglish": "CRITICAL: You MUST reply in Hinglish — Hindi words in Roman/Latin script mixed with English. Example: 'Aapke tamatar mein yeh bimari hai, neem oil spray karein.' Do NOT use Devanagari script.",
+        "english":  "Reply in clear, simple English.",
+    }.get(language, "Reply in clear, simple English.")
 
-    system_prompt = f"""You are Crop Doctor, an expert agricultural assistant for Indian farmers.
+    system_prompt = f"""You are Crop Doctor, a friendly agricultural AI for Indian farmers.
 {lang_instruction}
-Crop: {crop}. Disease: {disease if not is_healthy else 'Healthy — no disease'}.
-Give practical, simple advice. Keep responses concise (2-4 sentences)."""
+Crop: {crop}. Condition: {disease if not is_healthy else 'Healthy — no disease detected'}.
+Give practical, concise advice in 2-4 sentences."""
 
     try:
         async with httpx.AsyncClient(timeout=20) as client:

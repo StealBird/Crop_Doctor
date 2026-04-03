@@ -1,29 +1,34 @@
 import { useState, useEffect } from "react";
 import CameraCapture from "./components/CameraCapture";
-import ResultCard from "./components/ResultCard";
 import Loader from "./components/Loader";
+import ResultCard from "./components/ResultCard";
+import ChatBox from "./components/ChatBox";
 import './App.css';
-import { LanguageSelector, useTranslation, useLanguage, LANGUAGE_TO_API } from './LanguageContext';
+import { useLanguage, LANG_OPTIONS } from './LanguageContext';
 
 const API = process.env.REACT_APP_API_URL;
 
 export default function App() {
-  const t = useTranslation();
-  const { language } = useLanguage();
+  const { lang, switchLang, t, langCode } = useLanguage();
+  const [serverWaking, setServerWaking] = useState(false);
+  const [showLangMenu, setShowLangMenu] = useState(false);
+
+  // ── Diagnosis state ──────────────────────────────────────────────
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [preview, setPreview] = useState(null);
-  const [serverWaking, setServerWaking] = useState(false);
 
-  // Wake up Render backend as soon as app loads (prevents cold start delay)
+  const currentLang = LANG_OPTIONS.find(l => l.code === lang);
+
+  // Wake up Render backend on load
   useEffect(() => {
     const wake = async () => {
       try {
         setServerWaking(true);
         await fetch(`${API}/`);
       } catch {
-        // silent — it's fine if backend is asleep
+        // silent
       } finally {
         setServerWaking(false);
       }
@@ -38,12 +43,19 @@ export default function App() {
     setPreview(URL.createObjectURL(file));
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("language", LANGUAGE_TO_API[language]); // ← sends selected language to backend
+    formData.append("language", langCode);
     try {
       const res = await fetch(`${API}/predict`, { method: "POST", body: formData });
       const data = await res.json();
-      if (data.detail) setError(data.detail);
-      else setResult(data);
+      if (data.detail) {
+        setError(data.detail);
+      } else if (data.error === 'not_a_crop') {
+        setError('not_a_crop');
+      } else if (data.error) {
+        setError(t('error_try_again'));
+      } else {
+        setResult(data);
+      }
     } catch {
       setError(t('error_api_down'));
     } finally {
@@ -51,97 +63,161 @@ export default function App() {
     }
   };
 
-  const reset = () => { setResult(null); setError(null); setPreview(null); };
+  const reset = () => {
+    setResult(null);
+    setError(null);
+    setPreview(null);
+  };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f0f4f0" }}>
-      {/* Header */}
-      <header style={{
-        background: "linear-gradient(160deg, #0a2e1a 0%, #0f4a24 60%, #1a6b2f 100%)",
-        padding: "28px 24px 40px",
-        position: "relative",
-        overflow: "hidden"
-      }}>
-        <div style={{
-          position: "absolute", inset: 0, opacity: 0.04,
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23fff' fill-opacity='1'%3E%3Cpath d='M0 40L40 0H20L0 20M40 40V20L20 40'/%3E%3C/g%3E%3C/svg%3E")`
-        }} />
+    <div className="app-shell">
 
-        <div style={{ maxWidth: 520, margin: "0 auto", position: "relative" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{
-                width: 44, height: 44, background: "rgba(255,255,255,0.12)",
-                borderRadius: 14, display: "flex", alignItems: "center",
-                justifyContent: "center", fontSize: 22, backdropFilter: "blur(8px)"
-              }}>🌿</div>
+      {/* ── Header ── */}
+      <header className="app-header" onClick={() => showLangMenu && setShowLangMenu(false)}>
+        <div className="curve-bottom" />
+        <div className="header-inner">
+          <div className="header-top-row">
+            <div className="brand">
+              <div className="brand-icon">🌿</div>
               <div>
-                <div style={{ fontFamily: "'Fraunces', serif", color: "#fff", fontSize: 20, fontWeight: 600 }}>
-                  {t('app_title')}
-                </div>
-                <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, letterSpacing: "0.05em", textTransform: "uppercase" }}>
-                  AI Disease Detection
-                </div>
+                <div className="brand-name">{t('app_title')}</div>
+                <div className="brand-sub">{t('app_tagline')}</div>
               </div>
             </div>
-            <LanguageSelector />
+
+            {/* ── Language flag dropdown ── */}
+            <div style={{ position: 'relative' }}>
+              <button
+                id="btn-lang-selector"
+                onClick={(e) => { e.stopPropagation(); setShowLangMenu(m => !m); }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  background: 'rgba(255,255,255,0.12)',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  color: '#fff', padding: '8px 12px', borderRadius: 10,
+                  cursor: 'pointer', fontSize: 13, fontFamily: "'DM Sans',sans-serif"
+                }}
+              >
+                <span>{currentLang?.flag}</span>
+                <span>{currentLang?.label}</span>
+                <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 10 }}>▾</span>
+              </button>
+
+              {showLangMenu && (
+                <div style={{
+                  position: 'absolute', right: 0, top: 44,
+                  background: '#fff', borderRadius: 12,
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
+                  overflow: 'hidden', zIndex: 200, minWidth: 148,
+                  border: '1px solid #e0e0e0'
+                }}>
+                  {LANG_OPTIONS.map(l => (
+                    <button
+                      key={l.code}
+                      onClick={(e) => { e.stopPropagation(); switchLang(l.code); setShowLangMenu(false); }}
+                      style={{
+                        width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '11px 16px', border: 'none',
+                        background: lang === l.code ? '#f0faf0' : '#fff',
+                        color: lang === l.code ? '#1b5e20' : '#444',
+                        fontWeight: lang === l.code ? 600 : 400,
+                        fontSize: 13, cursor: 'pointer',
+                        fontFamily: "'DM Sans',sans-serif", textAlign: 'left'
+                      }}
+                    >
+                      <span>{l.flag}</span>
+                      <span>{l.label}</span>
+                      {lang === l.code && <span style={{ marginLeft: 'auto', color: '#2d8a4e', fontSize: 12 }}>✓</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
-          <h1 style={{ fontFamily: "'Fraunces', serif", color: "#fff", fontSize: 28, lineHeight: 1.2, margin: "0 0 8px" }}>
-            Diagnose your crop.<br />
-            <em style={{ color: "#7dd87a", fontStyle: "italic" }}>Instantly.</em>
-          </h1>
-          <p style={{ color: "rgba(255,255,255,0.55)", fontSize: 13, lineHeight: 1.5, margin: 0 }}>
-            38 diseases · 14 crops · Free for every farmer
-          </p>
+          <div className="header-hero">
+            <h1>
+              {t('diagnose_title')}<br />
+              <em>{t('diagnose_italic')}</em>
+            </h1>
+            <p>{t('diagnose_sub')}</p>
+            <div className="header-stats">
+              <span className="header-stat-pill">🌿 {t('stat_crops')}</span>
+              <span className="header-stat-pill">{t('stat_diseases')}</span>
+              <span className="header-stat-pill alert">🔶 {t('stat_ai')}</span>
+            </div>
+          </div>
 
-          {/* Cold-start warning — only shown while pinging */}
           {serverWaking && (
-            <div style={{
-              marginTop: 12, background: "rgba(255,255,255,0.1)",
-              borderRadius: 10, padding: "8px 14px",
-              display: "flex", alignItems: "center", gap: 8
-            }}>
-              <div style={{
-                width: 8, height: 8, borderRadius: "50%",
-                background: "#ffd54f",
-                animation: "wakepulse 1.5s infinite"
-              }} />
-              <span style={{ color: "rgba(255,255,255,0.75)", fontSize: 12 }}>
-                Starting server... first diagnosis may take ~30 seconds
+            <div className="wake-banner">
+              <div className="wake-dot" />
+              <span className="wake-text">
+                Starting server… first diagnosis may take ~30 seconds
               </span>
             </div>
           )}
         </div>
       </header>
 
-      {/* Main content */}
-      <main style={{ maxWidth: 520, margin: "0 auto", padding: "0 16px 40px", marginTop: -16 }}>
-        <div style={{ background: "#fff", borderRadius: 24, overflow: "hidden", boxShadow: "0 4px 24px rgba(0,0,0,0.08)" }}>
-          {!result && !loading && (
+      {/* ── Main card — always shows upload, result appears below ── */}
+      <main className="main-card" role="main">
+        <div className="card">
+
+          {/* ── Upload section — always visible unless loading ── */}
+          {!loading && !result && (
             <CameraCapture onCapture={diagnose} preview={preview} />
           )}
+
+          {/* ── Loader ── */}
           {loading && <Loader />}
-          {error && (
-            <div style={{ padding: 24, textAlign: "center" }}>
-              <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>
-              <p style={{ color: "#c62828", fontWeight: 500, marginBottom: 16 }}>{error}</p>
-              <button onClick={reset} style={{
-                background: "#2d8a4e", color: "#fff", border: "none",
-                padding: "12px 28px", borderRadius: 12, fontSize: 14,
-                fontFamily: "'DM Sans', sans-serif", cursor: "pointer"
-              }}>{t('error_try_again')}</button>
-            </div>
+
+          {/* ── Errors ── */}
+          {error && !loading && (
+            error === 'not_a_crop' ? (
+              <div className="error-box" style={{ borderColor: '#f97316', background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)' }}>
+                <div className="error-icon">🌿</div>
+                <p className="error-msg" style={{ color: '#9a3412' }}>{t('error_not_crop')}</p>
+                <button id="btn-try-again" className="diagnose-btn" onClick={reset}
+                  style={{ background: 'linear-gradient(135deg, #f97316, #ea580c)' }}>
+                  📸 {t('try_again')}
+                </button>
+              </div>
+            ) : (
+              <div className="error-box">
+                <div className="error-icon">⚠️</div>
+                <p className="error-msg">{error}</p>
+                <button id="btn-try-again" className="diagnose-btn" onClick={reset}>
+                  {t('try_again')}
+                </button>
+              </div>
+            )
           )}
-          {result && <ResultCard result={result} preview={preview} onReset={reset} />}
+
+          {/* ── Result card — shown after successful diagnosis ── */}
+          {result && !loading && (
+            <ResultCard 
+              result={result} 
+              preview={preview} 
+              onReset={reset} 
+              onOpenSpecialist={() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })} 
+            />
+          )}
+
         </div>
+
+        {/* ── ChatBox — shown after successful diagnosis at the bottom ── */}
+        {result && !loading && (
+          <div className="card" style={{ marginTop: 16 }}>
+            <ChatBox disease={result.disease} crop={result.crop} is_healthy={result.is_healthy} />
+          </div>
+        )}
+
       </main>
 
-      <footer style={{ textAlign: "center", paddingBottom: 24, color: "#aaa", fontSize: 12 }}>
-        Crop Doctor v1.0 — Free for every farmer 🌿
+      {/* ── Footer ── */}
+      <footer className="app-footer">
+        {t('footer')} 🌿
       </footer>
-
-      <style>{`@keyframes wakepulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
     </div>
   );
 }

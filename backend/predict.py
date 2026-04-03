@@ -391,18 +391,23 @@ def diagnose_crop(image_bytes: bytes, media_type: str = "image/jpeg") -> dict:
             for i in top3_idx
         ]
 
-        # Low confidence — ask to retake
+        # Low confidence — likely not a crop/plant image
         if confidence < 0.60:
             return {
-                "error": "Image quality too low or disease not recognized. Please retake a clearer close-up photo of the affected leaf."
+                "error": "not_a_crop"
             }
 
         is_healthy = "healthy" in class_name.lower()
         solution = get_solution(class_name)
 
-        # Clean up display names
+        # Clean up display names — use lookup first, fall back to string cleaning
+        CROP_CLEAN_NAMES = {
+            "Corn (maize)": "Corn",
+            "Pepper, bell": "Bell Pepper",
+        }
         parts = class_name.replace("___", "|").split("|")
-        crop_name = parts[0].replace("_", " ").replace("(maize)", "Maize").strip()
+        crop_raw = parts[0].replace("_", " ").strip()
+        crop_name = CROP_CLEAN_NAMES.get(crop_raw, crop_raw)
         disease_name = "Healthy" if is_healthy else parts[1].replace("_", " ").strip() if len(parts) > 1 else class_name
 
         return {

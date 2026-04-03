@@ -1,185 +1,269 @@
-import ChatBox from "./ChatBox";
-import { useTranslation } from '../LanguageContext';
+import { useLanguage } from '../LanguageContext';
 
-const SEVERITY_STYLES = {
-  None:     { bg: "#e8f5e9", color: "#2e7d32", label: "Healthy" },
-  Mild:     { bg: "#fff8e1", color: "#f57f17", label: "Mild" },
-  Moderate: { bg: "#fff3e0", color: "#e65100", label: "Moderate" },
-  Severe:   { bg: "#fce4ec", color: "#b71c1c", label: "Severe" },
-  Unknown:  { bg: "#f5f5f5", color: "#616161", label: "Unknown" },
+const SEVERITY_MAP = {
+  None:     { bg: "#dcfce7", color: "#15803d", label: "Healthy",  dot: "#22c55e" },
+  Mild:     { bg: "#fef9c3", color: "#854d0e", label: "Mild",     dot: "#eab308" },
+  Moderate: { bg: "#ffedd5", color: "#9a3412", label: "Moderate", dot: "#f97316" },
+  Severe:   { bg: "#fee2e2", color: "#991b1b", label: "Severe",   dot: "#ef4444" },
+  Unknown:  { bg: "#f3f4f6", color: "#374151", label: "Unknown",  dot: "#9ca3af" },
 };
 
-export default function ResultCard({ result, preview, onReset }) {
-  const t = useTranslation();
+function parseConfidence(conf) {
+  if (!conf) return 0;
+  return parseFloat(String(conf).replace('%', '')) || 0;
+}
 
-  const INFO_ROWS = [
-    { icon: "🔬", key: "cause",         label: t('cause') },
-    { icon: "👁️", key: "symptoms",      label: t('symptoms') },
-    { icon: "🌿", key: "organic_cure",  label: t('organic_cure'),  highlight: "green" },
-    { icon: "💊", key: "chemical_cure", label: t('chemical_cure'), highlight: "blue" },
-    { icon: "🛡️", key: "prevention",    label: t('prevention') },
-    { icon: "⏱️", key: "recovery_time", label: t('recovery_time') },
+export default function ResultCard({ result, preview, onReset, onOpenSpecialist }) {
+  const { t } = useLanguage();
+  const sev = SEVERITY_MAP[result.severity] || SEVERITY_MAP.Unknown;
+  const confNum = parseConfidence(result.confidence);
+
+  // Pick meter color based on confidence
+  const meterColor =
+    confNum >= 85 ? '#22c55e' :
+    confNum >= 60 ? '#f97316' : '#ef4444';
+
+  // Width clamped to 100%
+  const meterWidth = `${Math.min(Math.max(confNum, 2), 100)}%`;
+
+  const GRID_ITEMS = [
+    { icon: "🔬", label: "CAUSE",      value: result.cause      || "—" },
+    { icon: "👁",  label: "SYMPTOMS",  value: result.symptoms    || "—" },
+    { icon: "🌱", label: "TREATMENT",  value: result.organic_cure || result.chemical_cure || "—" },
+    { icon: "🛡",  label: "PREVENTION",value: result.prevention  || "—" },
   ];
 
-  const sev = SEVERITY_STYLES[result.severity] || SEVERITY_STYLES.Unknown;
-  const headerBg = result.is_healthy
-    ? "linear-gradient(135deg, #1b5e20, #2e7d32)"
-    : "linear-gradient(135deg, #7f0000, #b71c1c)";
+  const handleFindKVK = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        ({ coords: { latitude, longitude } }) => {
+          window.open(
+            `https://www.google.com/maps/search/KVK+Krishi+Vigyan+Kendra/@${latitude},${longitude},12z`,
+            '_blank'
+          );
+        },
+        () => window.open('https://www.google.com/maps/search/KVK+Krishi+Vigyan+Kendra+near+me', '_blank')
+      );
+    } else {
+      window.open('https://www.google.com/maps/search/KVK+Krishi+Vigyan+Kendra+near+me', '_blank');
+    }
+  };
+
+  const handleCallSpecialist = () => window.open('tel:18001801551', '_self');
 
   return (
-    <div>
-      {/* ── Disease header ── */}
-      <div style={{ background: headerBg, padding: "20px 20px 24px" }}>
-        <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
-          {preview && (
-            <img src={preview} alt="leaf" style={{
-              width: 64, height: 64, borderRadius: 14, objectFit: "cover",
-              flexShrink: 0, border: "2px solid rgba(255,255,255,0.2)"
-            }} />
-          )}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-              <span style={{ fontSize: 18 }}>{result.is_healthy ? "✅" : "⚠️"}</span>
-              <span style={{ fontFamily: "'Fraunces', serif", color: "#fff", fontSize: 19, fontWeight: 600 }}>
-                {result.crop}
-              </span>
-            </div>
-            <p style={{ color: result.is_healthy ? "#a5d6a7" : "#ef9a9a", fontSize: 14, margin: "0 0 10px", fontWeight: 500 }}>
-              {result.disease}
-            </p>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              <span style={{
-                background: "rgba(255,255,255,0.15)", color: "#fff",
-                fontSize: 11, padding: "3px 10px", borderRadius: 20
-              }}>
-                {result.confidence} {t('confidence').toLowerCase()}
-              </span>
-              <span style={{
-                background: sev.bg, color: sev.color,
-                fontSize: 11, padding: "3px 10px", borderRadius: 20, fontWeight: 500
-              }}>
-                {sev.label}
-              </span>
-            </div>
+    <div className="rc-shell">
+
+      {/* ══ NEW DIAGNOSIS — top of card ══ */}
+      <div className="rc-topbar">
+        <span className="rc-topbar-label">✅ Diagnosis Complete</span>
+        <button id="btn-new-diagnosis" className="rc-topbar-btn" onClick={onReset}>
+          📸 New Diagnosis
+        </button>
+      </div>
+
+      {/* ══ BANNER — orange (diseased) / green (healthy) ══ */}
+      <div className={`rc-banner ${result.is_healthy ? 'rc-banner-healthy' : 'rc-banner-diseased'}`}>
+        <div className="rc-banner-text">
+          <div className="rc-disease-name">
+            {result.is_healthy ? '✅' : '⚠️'} {result.crop}
+            {result.disease && result.disease !== result.crop && ` – ${result.disease}`}
           </div>
+          <div className="rc-confidence-sub">AI Confidence: {result.confidence}</div>
+        </div>
+
+        {/* Floating leaf with green glow */}
+        {preview && (
+          <div className="rc-leaf-wrap">
+            <div className="rc-leaf-glow" />
+            <img src={preview} alt="Crop leaf" className="rc-leaf-img" />
+          </div>
+        )}
+      </div>
+
+      {/* ══ CONFIDENCE METER ══ */}
+      <div className="rc-section rc-meter-section">
+        <div className="rc-meter-row">
+          <span className="rc-meter-label">AI Confidence Meter</span>
+          <span className="rc-meter-value" style={{ color: meterColor }}>
+            {result.confidence}
+          </span>
+        </div>
+
+        {/* Track */}
+        <div className="rc-meter-track">
+          {/* Filled part */}
+          <div
+            className="rc-meter-fill"
+            style={{ width: meterWidth, backgroundColor: meterColor }}
+          />
+          {/* Glow dot at end */}
+          <div
+            className="rc-meter-dot"
+            style={{ left: meterWidth, backgroundColor: meterColor,
+              boxShadow: `0 0 10px ${meterColor}, 0 0 20px ${meterColor}55` }}
+          />
+        </div>
+
+        {/* Labels under track */}
+        <div className="rc-meter-labels">
+          <span>0%</span><span>25%</span><span>50%</span>
+          <span>75%</span><span>100%</span>
+        </div>
+
+        {/* Severity + recovery pills */}
+        <div className="rc-pills-row">
+          <span className="rc-pill" style={{ background: sev.bg, color: sev.color }}>
+            <span className="rc-pill-dot" style={{ background: sev.dot }} />
+            {sev.label}
+          </span>
+          {result.recovery_time && (
+            <span className="rc-pill rc-pill-ghost">⏱ {result.recovery_time}</span>
+          )}
+          {result.confidence && (
+            <span className="rc-pill rc-pill-ghost">
+              {confNum >= 85 ? '🎯 High Confidence' : confNum >= 60 ? '⚡ Moderate' : '⚠️ Low Confidence'}
+            </span>
+          )}
         </div>
       </div>
 
-      {/* ── AI Summary ── */}
-      {result.ai_summary && (
-        <div style={{
-          margin: "16px 20px 0",
-          background: result.is_healthy ? "#f1f8f1" : "#fffbf0",
-          border: `1px solid ${result.is_healthy ? "#c8e6c9" : "#ffe082"}`,
-          borderLeft: `4px solid ${result.is_healthy ? "#2d8a4e" : "#f9a825"}`,
-          borderRadius: 14,
-          padding: "14px 16px",
-        }}>
-          {/* Label */}
-          <p style={{
-            fontSize: 9, fontWeight: 600, letterSpacing: "0.1em",
-            textTransform: "uppercase",
-            color: result.is_healthy ? "#388e3c" : "#f57f17",
-            margin: "0 0 8px",
-            display: "flex", alignItems: "center", gap: 5
-          }}>
-            🤖 AI Doctor's Assessment
-          </p>
-          {/* The natural language paragraph */}
-          <p style={{
-            fontSize: 13.5, color: "#2d3436",
-            lineHeight: 1.65, margin: 0,
-            fontFamily: "'DM Sans', sans-serif"
-          }}>
-            {result.ai_summary}
+      {/* ══ AI INTRO MESSAGE ══ */}
+      <div className="rc-section">
+        <div className="rc-ai-message">
+          <div className="rc-ai-avatar">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <rect x="3" y="11" width="18" height="11" rx="2"/>
+              <path d="M7 11V7a5 5 0 0110 0v4"/>
+              <circle cx="12" cy="16" r="1" fill="currentColor"/>
+            </svg>
+          </div>
+          <p className="rc-ai-text">
+            {result.ai_summary || (result.is_healthy
+              ? `Your ${result.crop} looks completely healthy! No disease detected. Keep up the great care.`
+              : `Hello! I've detected ${result.disease} in your ${result.crop}. Don't worry — it's treatable. Ask the AI Specialist anything about treatment, cost, or prevention.`
+            )}
           </p>
         </div>
-      )}
+      </div>
 
-      {/* ── Detail rows ── */}
-      <div style={{ padding: "0 20px" }}>
-        {result.is_healthy ? (
-          /* Healthy — show prevention tip only */
-          result.prevention && (
-            <div style={{
-              background: "#f1f8f1", borderRadius: 16, padding: "14px 16px",
-              margin: "14px 0", borderLeft: "4px solid #2d8a4e"
-            }}>
-              <p style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "#388e3c", margin: "0 0 6px" }}>
-                🛡️ {t('prevention')}
-              </p>
-              <p style={{ color: "#444", fontSize: 13, lineHeight: 1.5, margin: 0 }}>
-                {result.prevention}
-              </p>
-            </div>
-          )
-        ) : (
-          INFO_ROWS.map(({ icon, key, label, highlight }) => (
-            result[key] && result[key] !== "Not required" && (
-              <div key={key} style={{
-                display: "flex", gap: 12, padding: "13px 0",
-                borderBottom: "1px solid #f5f5f5", alignItems: "flex-start"
-              }}>
-                <span style={{ fontSize: 16, marginTop: 1, flexShrink: 0 }}>{icon}</span>
-                <div style={{ flex: 1 }}>
-                  <p style={{
-                    fontSize: 9, fontWeight: 500, letterSpacing: "0.1em",
-                    textTransform: "uppercase", color: "#bbb", margin: "0 0 3px"
-                  }}>{label}</p>
-                  <p style={{
-                    fontSize: 13,
-                    color: highlight === "green" ? "#1b5e20" : highlight === "blue" ? "#0d47a1" : "#333",
-                    lineHeight: 1.5, margin: 0,
-                    background: highlight === "green" ? "#f1f8f1" : highlight === "blue" ? "#e3f2fd" : "transparent",
-                    padding: highlight ? "6px 10px" : 0,
-                    borderRadius: highlight ? 8 : 0
-                  }}>{result[key]}</p>
-                </div>
-              </div>
-            )
-          ))
-        )}
-
-        {/* Top predictions */}
-        {result.top_predictions && (
-          <div style={{ padding: "14px 0" }}>
-            <p style={{
-              fontSize: 9, fontWeight: 500, letterSpacing: "0.1em",
-              textTransform: "uppercase", color: "#bbb", marginBottom: 10
-            }}>{t('top_predictions')}</p>
-            {result.top_predictions.map((p, i) => (
-              <div key={i} style={{
-                display: "flex", justifyContent: "space-between",
-                alignItems: "center", padding: "5px 0"
-              }}>
-                <span style={{ fontSize: 12, color: "#666" }}>{p.disease}</span>
-                <span style={{
-                  fontSize: 12, fontWeight: 500,
-                  color: i === 0 ? "#2d8a4e" : "#bbb"
-                }}>{p.confidence}</span>
+      {/* ══ 4-COLUMN INFO GRID (diseased) ══ */}
+      {!result.is_healthy && (
+        <div className="rc-section">
+          <div className="rc-info-grid">
+            {GRID_ITEMS.map(({ icon, label, value }) => (
+              <div key={label} className="rc-info-card">
+                <div className="rc-info-icon">{icon}</div>
+                <div className="rc-info-label">{label}</div>
+                <div className="rc-info-value">{value}</div>
               </div>
             ))}
           </div>
-        )}
+        </div>
+      )}
+
+      {/* ══ HEALTHY — prevention block ══ */}
+      {result.is_healthy && result.prevention && (
+        <div className="rc-section">
+          <div className="rc-prevention-healthy">
+            <span className="rc-info-icon">🛡</span>
+            <div>
+              <div className="rc-info-label">PREVENTION TIPS TO STAY HEALTHY</div>
+              <div className="rc-info-value" style={{ marginTop: 5 }}>{result.prevention}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ TOP PREDICTIONS ══ */}
+      {result.top_predictions && result.top_predictions.length > 1 && (
+        <div className="rc-section">
+          <div className="rc-section-label">{t('top_predictions')}</div>
+          <div className="rc-preds">
+            {result.top_predictions.slice(0, 3).map((p, i) => {
+              const pct = parseConfidence(p.confidence);
+              return (
+                <div key={i} className="rc-pred-row">
+                  <span className="rc-pred-name">{p.disease}</span>
+                  <div className="rc-pred-bar-wrap">
+                    <div
+                      className="rc-pred-bar"
+                      style={{
+                        width: `${pct}%`,
+                        backgroundColor: i === 0 ? 'var(--green-600)' : 'var(--border2)',
+                      }}
+                    />
+                  </div>
+                  <span className="rc-pred-conf"
+                    style={{ color: i === 0 ? 'var(--green-600)' : 'var(--text-3)' }}>
+                    {p.confidence}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ══ ACTION BUTTONS — KVK + Call ══ */}
+      <div className="rc-section">
+        <div className="rc-action-row">
+          <button id="btn-find-kvk" className="rc-action-btn" onClick={handleFindKVK}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/>
+              <circle cx="12" cy="10" r="3"/>
+            </svg>
+            Find KVK Office
+          </button>
+          <button id="btn-call-specialist" className="rc-action-btn rc-action-btn-call"
+            onClick={handleCallSpecialist}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.6a19.79 19.79 0 01-3.07-8.68A2 2 0 012 .82h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 8.91A16 16 0 0015.09 17.9l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
+            </svg>
+            Call Specialist
+          </button>
+        </div>
       </div>
 
-      {/* Chat */}
-      <div style={{ padding: "8px 20px 20px" }}>
-        <ChatBox disease={result.disease} crop={result.crop} is_healthy={result.is_healthy} />
-      </div>
-
-      {/* Reset */}
-      <div style={{ padding: "0 20px 24px" }}>
-        <button onClick={onReset} style={{
-          width: "100%", padding: "15px",
-          background: "linear-gradient(135deg, #1a5c30, #2d8a4e)",
-          color: "#fff", border: "none", borderRadius: 14, fontSize: 14,
-          fontWeight: 500, cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
-          boxShadow: "0 6px 20px rgba(45,138,78,0.25)"
-        }}>
-          📸 {t('back_button')}
+      {/* ══ CHAT WITH AI DOCTOR — full-width button ══ */}
+      <div className="rc-section">
+        <button
+          id="btn-open-ai-chat"
+          className="rc-chat-open-btn"
+          onClick={onOpenSpecialist}
+        >
+          <div className="rc-chat-btn-left">
+            <div className="rc-chat-btn-avatar">🧑‍🌾</div>
+            <div>
+              <div className="rc-chat-btn-title">Chat with AI Specialist</div>
+              <div className="rc-chat-btn-sub">
+                Ask about {result.is_healthy ? 'fertilizer & growing tips' : `treating ${result.disease}`}
+              </div>
+            </div>
+          </div>
+          <div className="rc-chat-btn-arrow">
+            <div className="rc-chat-btn-live">
+              <span className="rc-chat-live-dot" />
+              Live
+            </div>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M9 18l6-6-6-6"/>
+            </svg>
+          </div>
         </button>
       </div>
+
+      {/* ══ NEW DIAGNOSIS — bottom full width ══ */}
+      <div className="rc-section" style={{ paddingTop: 0 }}>
+        <button id="btn-new-diagnosis-bottom" className="reset-btn" onClick={onReset}>
+          ← {t('back_button')}
+        </button>
+      </div>
+
     </div>
   );
 }
