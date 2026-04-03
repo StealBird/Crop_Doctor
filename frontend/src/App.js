@@ -13,11 +13,11 @@ export default function App() {
   const [serverWaking, setServerWaking] = useState(false);
   const [showLangMenu, setShowLangMenu] = useState(false);
 
-  // ── Diagnosis state ──────────────────────────────────────────────
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [preview, setPreview] = useState(null);
+  const [showChat, setShowChat] = useState(false);
 
   const currentLang = LANG_OPTIONS.find(l => l.code === lang);
 
@@ -40,6 +40,7 @@ export default function App() {
     setLoading(true);
     setError(null);
     setResult(null);
+    setShowChat(false);
     setPreview(URL.createObjectURL(file));
     const formData = new FormData();
     formData.append("file", file);
@@ -67,6 +68,7 @@ export default function App() {
     setResult(null);
     setError(null);
     setPreview(null);
+    setShowChat(false);
   };
 
   return (
@@ -199,14 +201,17 @@ export default function App() {
               result={result} 
               preview={preview} 
               onReset={reset} 
-              onOpenSpecialist={() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })} 
+              onOpenSpecialist={() => {
+                setShowChat(true);
+                setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 100);
+              }} 
             />
           )}
 
         </div>
 
         {/* ── ChatBox — shown after successful diagnosis at the bottom ── */}
-        {result && !loading && (
+        {showChat && result && !loading && (
           <div className="card" style={{ marginTop: 16 }}>
             <ChatBox disease={result.disease} crop={result.crop} is_healthy={result.is_healthy} />
           </div>

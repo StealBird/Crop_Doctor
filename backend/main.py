@@ -138,20 +138,21 @@ async def generate_summary(result: dict, language: str) -> str:
     }.get(language, "Write in clear, warm English.")
 
     if is_healthy:
-        prompt = f"""{lang_instruction}
-
-Write 2 warm encouraging sentences as a crop doctor telling a farmer their {crop} is healthy.
+        prompt = f"""Write 2 warm encouraging sentences as a crop doctor telling a farmer their {crop} is healthy.
 Mention what healthy visual signs were detected: {visual}.
 Sound like a real caring doctor, not a robot. No bullet points."""
     else:
-        prompt = f"""{lang_instruction}
-
-Write exactly 3 sentences as a crop doctor giving a farmer their diagnosis result. Cover:
+        prompt = f"""Write exactly 3 sentences as a crop doctor giving a farmer their diagnosis result. Cover:
 1. What was detected: {disease} in their {crop} at {conf_str} confidence ({conf_words}).
 2. Why the AI thinks this — the specific visual evidence seen in the image: {visual}.
 3. Severity is {severity} — give one sentence of honest reassurance or urgency.
 
 Sound like a knowledgeable, warm doctor speaking to a farmer. No bullet points. No headers. Plain flowing text only."""
+
+    system_prompt = f"""You are a helpful Crop Doctor AI assistant.
+CRITICAL INSTRUCTION: You MUST write your ENTIRE response in the {language.upper()} language. 
+{lang_instruction}
+Do NOT output English sentences unless specifically asked to keep technical names in English."""
 
     try:
         async with httpx.AsyncClient(timeout=15) as client:
@@ -165,7 +166,10 @@ Sound like a knowledgeable, warm doctor speaking to a farmer. No bullet points. 
                     "model": "llama-3.1-8b-instant",
                     "max_tokens": 220,
                     "temperature": 0.7,
-                    "messages": [{"role": "user", "content": prompt}],
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": prompt}
+                    ],
                 },
             )
             data = response.json()
@@ -273,6 +277,7 @@ async def chat(body: dict):
     }.get(language, "Reply in clear, simple English.")
 
     system_prompt = f"""You are Crop Doctor, a friendly agricultural AI for Indian farmers.
+CRITICAL INSTRUCTION: You MUST reply ONLY in the {language.upper()} language.
 {lang_instruction}
 Crop: {crop}. Condition: {disease if not is_healthy else 'Healthy — no disease detected'}.
 Give practical, concise advice in 2-4 sentences."""

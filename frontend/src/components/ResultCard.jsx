@@ -57,9 +57,6 @@ export default function ResultCard({ result, preview, onReset, onOpenSpecialist 
       {/* ══ NEW DIAGNOSIS — top of card ══ */}
       <div className="rc-topbar">
         <span className="rc-topbar-label">✅ Diagnosis Complete</span>
-        <button id="btn-new-diagnosis" className="rc-topbar-btn" onClick={onReset}>
-          📸 New Diagnosis
-        </button>
       </div>
 
       {/* ══ BANNER — orange (diseased) / green (healthy) ══ */}
