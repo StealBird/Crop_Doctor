@@ -18,6 +18,7 @@ export default function App() {
   const [error, setError] = useState(null);
   const [preview, setPreview] = useState(null);
   const [showChat, setShowChat] = useState(false);
+  const [imageFile, setImageFile] = useState(null);
 
   const currentLang = LANG_OPTIONS.find(l => l.code === lang);
 
@@ -36,11 +37,21 @@ export default function App() {
     wake();
   }, []);
 
+  // When language changes, if we have an image and a result, re-diagnose to translate
+  useEffect(() => {
+    if (result && imageFile) {
+      // Create a dummy file if needed, but imageFile is exactly what was passed
+      diagnose(imageFile);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [langCode]);
+
   const diagnose = async (file) => {
     setLoading(true);
     setError(null);
     setResult(null);
     setShowChat(false);
+    setImageFile(file);
     setPreview(URL.createObjectURL(file));
     const formData = new FormData();
     formData.append("file", file);
@@ -69,6 +80,7 @@ export default function App() {
     setError(null);
     setPreview(null);
     setShowChat(false);
+    setImageFile(null);
   };
 
   return (
