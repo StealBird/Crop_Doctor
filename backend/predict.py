@@ -21,21 +21,31 @@ except ImportError:
             return tf.lite.Interpreter(model_path=model_path)
 
 
-# Load model and class names once on startup
+# Load models once on startup
 BASE = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE, "model", "model.tflite")
 CLASSES_PATH = os.path.join(BASE, "model", "class_names.json")
 
+# Disease Model
 interpreter = get_interpreter(MODEL_PATH)
 interpreter.allocate_tensors()
-
 input_details = interpreter.get_input_details()
 output_details = interpreter.get_output_details()
+
+# Plant Gate Model (MobileNetV1/V2 TFLite)
+GATE_MODEL_PATH = os.path.join(BASE, "model", "mobilenet_v1.tflite")
+gate_interpreter = get_interpreter(GATE_MODEL_PATH)
+gate_interpreter.allocate_tensors()
+gate_input_details = gate_interpreter.get_input_details()
+gate_output_details = gate_interpreter.get_output_details()
 
 with open(CLASSES_PATH) as f:
     CLASS_NAMES = json.load(f)
 
-print(f"✅ Model loaded — {len(CLASS_NAMES)} disease classes ready")
+# Hardcoded ImageNet whitelist specific to plants, fruits, vegetables as requested
+PLANT_WHITELIST = {847, 950, 951, 954, 955, 956, 957, 958, 959, 963, 971, 992, 309, 943, 944, 945, 946, 947, 948, 949}
+
+print(f"✅ Models loaded — {len(CLASS_NAMES)} disease classes ready. Gate active.")
 
 # ── Solutions database ─────────────────────────────────────────
 SOLUTIONS = {
@@ -365,9 +375,42 @@ def get_solution(class_name):
 
 def diagnose_crop(image_bytes: bytes, media_type: str = "image/jpeg") -> dict:
     try:
-        # Preprocess image
+        # Preprocess base image
         image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
         image = image.resize((224, 224))
+        
+        # --- 1) PLANT GATE (MobileNet ImageNet) ---
+        # Normalize to [-1, 1] using numpy only for the gate
+        gate_array = (np.array(image, dtype=np.float32) / 127.5) - 1.0
+        gate_array = np.expand_dims(gate_array, axis=0)
+
+        # However, the user-provided mobilenet_v1_1.0_224_quant.tflite requires uint8. 
+        # But per the exact user spec: "normalize to [-1, 1] using numpy only" - we will abide by it. 
+        # TFLite Runtime will throw an error if the model specifically demands uint8 and we give float32.
+        # To be completely robust and follow their instruction safely, we cast to uint8 if the model expects it,
+        # otherwise we use their float32. By default MobileNetV2 uses float32:
+        if gate_input_details[0]['dtype'] == np.uint8:
+            gate_array = np.array(image, dtype=np.uint8)
+            gate_array = np.expand_dims(gate_array, axis=0)
+        
+        gate_interpreter.set_tensor(gate_input_details[0]['index'], gate_array)
+        gate_interpreter.invoke()
+        gate_preds = gate_interpreter.get_tensor(gate_output_details[0]['index'])[0]
+
+        gate_top3 = np.argsort(gate_preds)[-3:][::-1]
+        
+        # Check against plant whitelist
+        is_plant = False
+        for idx in gate_top3:
+            if idx in PLANT_WHITELIST:
+                is_plant = True
+                break
+
+        if not is_plant:
+            return {"error": "not_a_crop"}
+
+        # --- 2) DISEASE PREDICTION ---
+        # Disease model expects [0, 1] normalization
         img_array = np.array(image, dtype=np.float32) / 255.0
         img_array = np.expand_dims(img_array, axis=0)
 
@@ -390,12 +433,6 @@ def diagnose_crop(image_bytes: bytes, media_type: str = "image/jpeg") -> dict:
             }
             for i in top3_idx
         ]
-
-        # Low confidence — likely not a crop/plant image
-        if confidence < 0.60:
-            return {
-                "error": "not_a_crop"
-            }
 
         is_healthy = "healthy" in class_name.lower()
         solution = get_solution(class_name)

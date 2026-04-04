@@ -5,9 +5,8 @@ import httpx
 import os
 import json
 import io
-import numpy as np
 from PIL import Image
-from predict import diagnose_crop, get_interpreter
+from predict import diagnose_crop
 
 app = FastAPI(title="Crop Doctor API")
 
@@ -23,69 +22,7 @@ GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 TRANSLATE_FIELDS = ["cause", "symptoms", "organic_cure", "chemical_cure", "prevention", "recovery_time"]
 
-# ============== PLANT VALIDITY GATE ==============
-# Load MobileNetV1 once at startup using TFLite
-BASE = os.path.dirname(os.path.abspath(__file__))
-PLANT_MODEL_PATH = os.path.join(BASE, "model", "mobilenet_v1.tflite")
-LABELS_PATH = os.path.join(BASE, "model", "imagenet_labels.txt")
-
-try:
-    plant_gate_interpreter = get_interpreter(PLANT_MODEL_PATH)
-    plant_gate_interpreter.allocate_tensors()
-    plant_input_details = plant_gate_interpreter.get_input_details()
-    plant_output_details = plant_gate_interpreter.get_output_details()
-
-    with open(LABELS_PATH, "r") as f:
-        # Read ImageNet labels (usually 1001 mapping to model output)
-        IMAGENET_LABELS = [line.strip().lower() for line in f.readlines()]
-except Exception as e:
-    print(f"Warning: Could not load plant gate model: {e}")
-    plant_gate_interpreter = None
-
-# Predefined whitelist of keywords mapping to plants, crops, fruits, vegetables
-PLANT_KEYWORDS = [
-    'leaf', 'plant', 'flower', 'tree', 'fruit', 'vegetable', 'apple', 'orange', 'lemon', 
-    'fig', 'pineapple', 'banana', 'jackfruit', 'pomegranate', 'daisy', 'rose', 'mushroom', 
-    'squash', 'cabbage', 'cauliflower', 'zucchini', 'broccoli', 'artichoke', 'bell pepper', 
-    'strawberry', 'corn', 'grape', 'tomato', 'potato', 'cherry', 'peach', 'blueberry', 
-    'soybean', 'cucumber', 'pumpkin', 'acorn', 'buckeye', 'coral fungus', 'agaric', 
-    'gyromitra', 'stinkhorn', 'earthstar', 'hen-of-the-woods', 'bolete', 'ear', 'pot', 
-    'greenhouse', 'rapeseed', 'grass', 'moss'
-]
-
-def is_plant_image(image_bytes: bytes) -> bool:
-    if not plant_gate_interpreter:
-        # If gate model failed to load during init, fail open
-        return True
-
-    try:
-        # Convert any image format to RGB using Pillow
-        img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
-        img = img.resize((224, 224))
-        
-        # MobileNetV1 Quantized requires uint8 input (0-255)
-        img_array = np.array(img, dtype=np.uint8)
-        img_array = np.expand_dims(img_array, axis=0)
-        
-        plant_gate_interpreter.set_tensor(plant_input_details[0]['index'], img_array)
-        plant_gate_interpreter.invoke()
-        
-        preds = plant_gate_interpreter.get_tensor(plant_output_details[0]['index'])[0]
-        
-        # Get top-3 prediction indices
-        top_3_indices = np.argsort(preds)[-3:][::-1]
-        
-        # Check against whitelist
-        for idx in top_3_indices:
-            label = IMAGENET_LABELS[idx]
-            if any(kw in label for kw in PLANT_KEYWORDS):
-                return True
-        return False
-    except Exception as e:
-        print(f"Plant gate processing error: {e}")
-        # Fail safe - allow processing if gate fails for some reason
-        return True
-# =================================================
+# The plant validity gate has been moved to predict.py natively
 
 # Static crop name translations — prevents phonetic guessing by Groq
 CROP_NATIVE_NAMES = {
@@ -312,16 +249,22 @@ async def predict(
     file: UploadFile = File(...),
     language: str = Form(default="english"),
 ):
+    valid_types = ["image/jpeg", "image/png", "image/webp"]
+    if file.content_type and file.content_type not in valid_types:
+        return {"error": "Unsupported file format. Please upload a JPEG, PNG, or WEBP image."}
+
     image_bytes = await file.read()
 
-    # --- Plant Validity Pre-Check Gate ---
-    if not is_plant_image(image_bytes):
-        return {
-            "valid": False,
-            "message": "No plant or crop detected. Please upload a clear photo of a leaf or crop."
-        }
+    # Normalize all uploaded formats (webp, png, etc.) to standard JPEG bytes
+    try:
+        img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        img_io = io.BytesIO()
+        img.save(img_io, format="JPEG", quality=90)
+        jpeg_bytes = img_io.getvalue()
+    except Exception as e:
+        return {"error": f"Invalid image format or corrupted file: {str(e)}"}
 
-    result = diagnose_crop(image_bytes)
+    result = diagnose_crop(jpeg_bytes)
 
     # Surface model errors directly (e.g. not_a_crop, processing failures)
     if "error" in result:
