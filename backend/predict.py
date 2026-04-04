@@ -42,10 +42,25 @@ gate_output_details = gate_interpreter.get_output_details()
 with open(CLASSES_PATH) as f:
     CLASS_NAMES = json.load(f)
 
-# Hardcoded ImageNet whitelist specific to plants, fruits, vegetables as requested
-PLANT_WHITELIST = {847, 950, 951, 954, 955, 956, 957, 958, 959, 963, 971, 992, 309, 943, 944, 945, 946, 947, 948, 949}
+# Hardcoded ImageNet blacklist to block obvious non-plants
+# - People (0-99)
+# - Mammals (151-270)
+# - Birds (271-350)
+# - Vehicles (400-530)
+# - Furniture (560-700)
+# - Electronics/Computers/Phones (~700-880)
+# - Cooked food/dishes (924-969)
+def is_blacklisted(idx):
+    if 0 <= idx <= 99: return True
+    if 151 <= idx <= 270: return True
+    if 271 <= idx <= 350: return True
+    if 400 <= idx <= 530: return True
+    if 560 <= idx <= 700: return True
+    if 700 <= idx <= 880: return True 
+    if 924 <= idx <= 935: return True
+    return False
 
-print(f"✅ Models loaded — {len(CLASS_NAMES)} disease classes ready. Gate active.")
+print(f"✅ Models loaded — {len(CLASS_NAMES)} disease classes ready. Blacklist gate active.")
 
 # ── Solutions database ─────────────────────────────────────────
 SOLUTIONS = {
@@ -397,16 +412,16 @@ def diagnose_crop(image_bytes: bytes, media_type: str = "image/jpeg") -> dict:
         gate_interpreter.invoke()
         gate_preds = gate_interpreter.get_tensor(gate_output_details[0]['index'])[0]
 
-        gate_top3 = np.argsort(gate_preds)[-3:][::-1]
+        gate_top5 = np.argsort(gate_preds)[-5:][::-1]
         
-        # Check against plant whitelist
-        is_plant = False
-        for idx in gate_top3:
-            if idx in PLANT_WHITELIST:
-                is_plant = True
+        # Check against blacklist
+        all_blacklisted = True
+        for idx in gate_top5:
+            if not is_blacklisted(idx):
+                all_blacklisted = False
                 break
 
-        if not is_plant:
+        if all_blacklisted:
             return {"error": "not_a_crop"}
 
         # --- 2) DISEASE PREDICTION ---
