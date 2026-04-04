@@ -4,6 +4,11 @@ from predict import diagnose_crop
 import httpx
 import os
 import json
+import io
+import numpy as np
+from PIL import Image
+from tensorflow.keras.applications.mobilenet_v2 import MobileNetV2, preprocess_input
+from tensorflow.keras.preprocessing.image import img_to_array
 
 app = FastAPI(title="Crop Doctor API")
 
@@ -18,6 +23,46 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 TRANSLATE_FIELDS = ["cause", "symptoms", "organic_cure", "chemical_cure", "prevention", "recovery_time"]
+
+# ============== PLANT VALIDITY GATE ==============
+# Load MobileNetV2 once at startup
+plant_gate_model = MobileNetV2(weights='imagenet')
+
+# Predefined whitelist of ImageNet plant class indices
+# Covers fruits, vegetables, flowers, trees, mushrooms, and pots/greenhouses
+PLANT_INDICES = {
+    # Vegetables & Fruits (935-957): mashed potato, bell pepper, artichoke, mushroom, Granny Smith, strawberry, orange, lemon, fig, pineapple, banana, jackfruit, custard apple, pomegranate, etc.
+    935, 936, 937, 938, 939, 940, 941, 942, 943, 944, 945, 946, 947, 948, 949, 950, 951, 952, 953, 954, 955, 956, 957,
+    # Plants, Trees, Flowers, Fungi (985-998): daisy, yellow lady's slipper, corn, acorn, hip, buckeye, coral fungus, agaric, gyromitra, stinkhorn, earthstar, hen-of-the-woods, bolete, ear, etc.
+    985, 986, 987, 988, 989, 990, 991, 992, 993, 994, 995, 996, 997, 998,
+    # Associated items: pot(738), greenhouse(593), bucket(463)
+    738, 593, 463
+}
+
+def is_plant_image(image_bytes: bytes) -> bool:
+    try:
+        # Convert any image format to RGB using Pillow
+        img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
+        img = img.resize((224, 224))
+        
+        x = img_to_array(img)
+        x = np.expand_dims(x, axis=0)
+        x = preprocess_input(x)
+        
+        preds = plant_gate_model.predict(x)[0]
+        # Get top-3 prediction indices
+        top_3_indices = np.argsort(preds)[-3:][::-1]
+        
+        # Check against whitelist
+        for idx in top_3_indices:
+            if idx in PLANT_INDICES:
+                return True
+        return False
+    except Exception as e:
+        print(f"Plant gate processing error: {e}")
+        # Fail safe - allow processing if gate fails for some reason
+        return True
+# =================================================
 
 # Static crop name translations — prevents phonetic guessing by Groq
 CROP_NATIVE_NAMES = {
@@ -245,6 +290,14 @@ async def predict(
     language: str = Form(default="english"),
 ):
     image_bytes = await file.read()
+
+    # --- Plant Validity Pre-Check Gate ---
+    if not is_plant_image(image_bytes):
+        return {
+            "valid": False,
+            "message": "No plant or crop detected. Please upload a clear photo of a leaf or crop."
+        }
+
     result = diagnose_crop(image_bytes)
 
     # Surface model errors directly (e.g. not_a_crop, processing failures)
