@@ -7,8 +7,7 @@ import json
 import io
 import numpy as np
 from PIL import Image
-from tensorflow.keras.applications.mobilenet_v2 import MobileNetV2, preprocess_input
-from tensorflow.keras.preprocessing.image import img_to_array
+from predict import diagnose_crop, get_interpreter
 
 app = FastAPI(title="Crop Doctor API")
 
@@ -25,37 +24,61 @@ GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 TRANSLATE_FIELDS = ["cause", "symptoms", "organic_cure", "chemical_cure", "prevention", "recovery_time"]
 
 # ============== PLANT VALIDITY GATE ==============
-# Load MobileNetV2 once at startup
-plant_gate_model = MobileNetV2(weights='imagenet')
+# Load MobileNetV1 once at startup using TFLite
+BASE = os.path.dirname(os.path.abspath(__file__))
+PLANT_MODEL_PATH = os.path.join(BASE, "model", "mobilenet_v1.tflite")
+LABELS_PATH = os.path.join(BASE, "model", "imagenet_labels.txt")
 
-# Predefined whitelist of ImageNet plant class indices
-# Covers fruits, vegetables, flowers, trees, mushrooms, and pots/greenhouses
-PLANT_INDICES = {
-    # Vegetables & Fruits (935-957): mashed potato, bell pepper, artichoke, mushroom, Granny Smith, strawberry, orange, lemon, fig, pineapple, banana, jackfruit, custard apple, pomegranate, etc.
-    935, 936, 937, 938, 939, 940, 941, 942, 943, 944, 945, 946, 947, 948, 949, 950, 951, 952, 953, 954, 955, 956, 957,
-    # Plants, Trees, Flowers, Fungi (985-998): daisy, yellow lady's slipper, corn, acorn, hip, buckeye, coral fungus, agaric, gyromitra, stinkhorn, earthstar, hen-of-the-woods, bolete, ear, etc.
-    985, 986, 987, 988, 989, 990, 991, 992, 993, 994, 995, 996, 997, 998,
-    # Associated items: pot(738), greenhouse(593), bucket(463)
-    738, 593, 463
-}
+try:
+    plant_gate_interpreter = get_interpreter(PLANT_MODEL_PATH)
+    plant_gate_interpreter.allocate_tensors()
+    plant_input_details = plant_gate_interpreter.get_input_details()
+    plant_output_details = plant_gate_interpreter.get_output_details()
+
+    with open(LABELS_PATH, "r") as f:
+        # Read ImageNet labels (usually 1001 mapping to model output)
+        IMAGENET_LABELS = [line.strip().lower() for line in f.readlines()]
+except Exception as e:
+    print(f"Warning: Could not load plant gate model: {e}")
+    plant_gate_interpreter = None
+
+# Predefined whitelist of keywords mapping to plants, crops, fruits, vegetables
+PLANT_KEYWORDS = [
+    'leaf', 'plant', 'flower', 'tree', 'fruit', 'vegetable', 'apple', 'orange', 'lemon', 
+    'fig', 'pineapple', 'banana', 'jackfruit', 'pomegranate', 'daisy', 'rose', 'mushroom', 
+    'squash', 'cabbage', 'cauliflower', 'zucchini', 'broccoli', 'artichoke', 'bell pepper', 
+    'strawberry', 'corn', 'grape', 'tomato', 'potato', 'cherry', 'peach', 'blueberry', 
+    'soybean', 'cucumber', 'pumpkin', 'acorn', 'buckeye', 'coral fungus', 'agaric', 
+    'gyromitra', 'stinkhorn', 'earthstar', 'hen-of-the-woods', 'bolete', 'ear', 'pot', 
+    'greenhouse', 'rapeseed', 'grass', 'moss'
+]
 
 def is_plant_image(image_bytes: bytes) -> bool:
+    if not plant_gate_interpreter:
+        # If gate model failed to load during init, fail open
+        return True
+
     try:
         # Convert any image format to RGB using Pillow
         img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
         img = img.resize((224, 224))
         
-        x = img_to_array(img)
-        x = np.expand_dims(x, axis=0)
-        x = preprocess_input(x)
+        # MobileNetV1 Quantized requires uint8 input (0-255)
+        img_array = np.array(img, dtype=np.uint8)
+        img_array = np.expand_dims(img_array, axis=0)
         
-        preds = plant_gate_model.predict(x)[0]
+        plant_gate_interpreter.set_tensor(plant_input_details[0]['index'], img_array)
+        plant_gate_interpreter.invoke()
+        
+        preds = plant_gate_interpreter.get_tensor(plant_output_details[0]['index'])[0]
+        
         # Get top-3 prediction indices
         top_3_indices = np.argsort(preds)[-3:][::-1]
         
         # Check against whitelist
         for idx in top_3_indices:
-            if idx in PLANT_INDICES:
+            label = IMAGENET_LABELS[idx]
+            if any(kw in label for kw in PLANT_KEYWORDS):
                 return True
         return False
     except Exception as e:
