@@ -1,4 +1,5 @@
 from fastapi import FastAPI, File, UploadFile, Form
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from predict import diagnose_crop
 import httpx
@@ -266,9 +267,11 @@ async def predict(
 
     result = diagnose_crop(jpeg_bytes)
 
-    # Surface model errors directly (e.g. not_a_crop, processing failures)
+    # Surface model errors directly (e.g. invalid_image, processing failures)
     if "error" in result:
-        return result
+        if result.get("error") == "invalid_image":
+            return JSONResponse(status_code=400, content={"error": result.get("message")})
+        return JSONResponse(status_code=400, content=result)
 
     # Generate natural language summary (new field: ai_summary)
     summary = await generate_summary(result, language)

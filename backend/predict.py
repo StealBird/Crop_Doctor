@@ -32,35 +32,17 @@ interpreter.allocate_tensors()
 input_details = interpreter.get_input_details()
 output_details = interpreter.get_output_details()
 
-# Plant Gate Model (MobileNetV1/V2 TFLite)
-GATE_MODEL_PATH = os.path.join(BASE, "model", "mobilenet_v1.tflite")
-gate_interpreter = get_interpreter(GATE_MODEL_PATH)
-gate_interpreter.allocate_tensors()
-gate_input_details = gate_interpreter.get_input_details()
-gate_output_details = gate_interpreter.get_output_details()
+# Bouncer Model (MobileNetV2 fine-tuned)
+BOUNCER_MODEL_PATH = os.path.join(BASE, "model", "bouncer.tflite")
+bouncer_interpreter = get_interpreter(BOUNCER_MODEL_PATH)
+bouncer_interpreter.allocate_tensors()
+bouncer_input_details = bouncer_interpreter.get_input_details()
+bouncer_output_details = bouncer_interpreter.get_output_details()
 
 with open(CLASSES_PATH) as f:
     CLASS_NAMES = json.load(f)
 
-# Hardcoded ImageNet blacklist to block obvious non-plants
-# - People (0-99)
-# - Mammals (151-270)
-# - Birds (271-350)
-# - Vehicles (400-530)
-# - Furniture (560-700)
-# - Electronics/Computers/Phones (~700-880)
-# - Cooked food/dishes (924-969)
-def is_blacklisted(idx):
-    if 0 <= idx <= 99: return True
-    if 151 <= idx <= 270: return True
-    if 271 <= idx <= 350: return True
-    if 400 <= idx <= 530: return True
-    if 560 <= idx <= 700: return True
-    if 700 <= idx <= 880: return True 
-    if 924 <= idx <= 935: return True
-    return False
-
-print(f"✅ Models loaded — {len(CLASS_NAMES)} disease classes ready. Blacklist gate active.")
+print(f"✅ Models loaded — {len(CLASS_NAMES)} disease classes ready. Bouncer gate active.")
 
 # ── Solutions database ─────────────────────────────────────────
 SOLUTIONS = {
@@ -394,35 +376,19 @@ def diagnose_crop(image_bytes: bytes, media_type: str = "image/jpeg") -> dict:
         image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
         image = image.resize((224, 224))
         
-        # --- 1) PLANT GATE (MobileNet ImageNet) ---
-        # Normalize to [-1, 1] using numpy only for the gate
-        gate_array = (np.array(image, dtype=np.float32) / 127.5) - 1.0
-        gate_array = np.expand_dims(gate_array, axis=0)
+        # --- 1) BOUNCER GATE (Leaves vs Garbage) ---
+        # The Bouncer model expects [0, 255] float32 input (preprocessing is built into the model)
+        bouncer_array = np.array(image, dtype=np.float32)
+        bouncer_array = np.expand_dims(bouncer_array, axis=0)
 
-        # However, the user-provided mobilenet_v1_1.0_224_quant.tflite requires uint8. 
-        # But per the exact user spec: "normalize to [-1, 1] using numpy only" - we will abide by it. 
-        # TFLite Runtime will throw an error if the model specifically demands uint8 and we give float32.
-        # To be completely robust and follow their instruction safely, we cast to uint8 if the model expects it,
-        # otherwise we use their float32. By default MobileNetV2 uses float32:
-        if gate_input_details[0]['dtype'] == np.uint8:
-            gate_array = np.array(image, dtype=np.uint8)
-            gate_array = np.expand_dims(gate_array, axis=0)
-        
-        gate_interpreter.set_tensor(gate_input_details[0]['index'], gate_array)
-        gate_interpreter.invoke()
-        gate_preds = gate_interpreter.get_tensor(gate_output_details[0]['index'])[0]
+        bouncer_interpreter.set_tensor(bouncer_input_details[0]['index'], bouncer_array)
+        bouncer_interpreter.invoke()
+        bouncer_pred = bouncer_interpreter.get_tensor(bouncer_output_details[0]['index'])[0][0]
 
-        gate_top5 = np.argsort(gate_preds)[-5:][::-1]
-        
-        # Check against blacklist
-        all_blacklisted = True
-        for idx in gate_top5:
-            if not is_blacklisted(idx):
-                all_blacklisted = False
-                break
-
-        if all_blacklisted:
-            return {"error": "not_a_crop"}
+        print(f"[DEBUG] Bouncer Leaf Probability: {bouncer_pred}")
+        # bouncer_pred represents probability of Class 1 (Leaf)
+        if bouncer_pred < 0.65:
+            return {"error": "invalid_image", "message": "We couldn't detect a clear leaf in this photo. Please try again."}
 
         # --- 2) DISEASE PREDICTION ---
         # Disease model expects [0, 1] normalization
