@@ -42,7 +42,7 @@ bouncer_output_details = bouncer_interpreter.get_output_details()
 with open(CLASSES_PATH) as f:
     CLASS_NAMES = json.load(f)
 
-print(f"✅ Models loaded — {len(CLASS_NAMES)} disease classes ready. Bouncer gate active.")
+print(f"[OK] Models loaded -- {len(CLASS_NAMES)} disease classes ready. Bouncer gate active.")
 
 # ── Solutions database ─────────────────────────────────────────
 SOLUTIONS = {
@@ -387,8 +387,11 @@ def diagnose_crop(image_bytes: bytes, media_type: str = "image/jpeg") -> dict:
 
         print(f"[DEBUG] Bouncer Leaf Probability: {bouncer_pred}")
         # bouncer_pred represents probability of Class 1 (Leaf)
-        if bouncer_pred < 0.65:
-            return {"error": "invalid_image", "message": "We couldn't detect a clear leaf in this photo. Please try again."}
+        if bouncer_pred < 0.50:
+            return {
+                "error": "not_a_crop",
+                "message": "We couldn't detect a clear leaf in this photo. Please try again."
+            }
 
         # --- 2) DISEASE PREDICTION ---
         # Disease model expects [0, 1] normalization

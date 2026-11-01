@@ -269,8 +269,8 @@ async def predict(
 
     # Surface model errors directly (e.g. invalid_image, processing failures)
     if "error" in result:
-        if result.get("error") == "invalid_image":
-            return JSONResponse(status_code=400, content={"error": result.get("message")})
+        if result.get("error") in ["invalid_image", "not_a_crop"]:
+            return JSONResponse(status_code=400, content={"error": "not_a_crop", "message": result.get("message")})
         return JSONResponse(status_code=400, content=result)
 
     # Generate natural language summary (new field: ai_summary)

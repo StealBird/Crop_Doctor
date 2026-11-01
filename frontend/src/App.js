@@ -61,7 +61,7 @@ export default function App() {
       const data = await res.json();
       if (data.detail) {
         setError(data.detail);
-      } else if (data.error === 'not_a_crop') {
+      } else if (data.error === 'not_a_crop' || data.error === 'invalid_image') {
         setError('not_a_crop');
       } else if (data.error) {
         setError(t('error_try_again'));
