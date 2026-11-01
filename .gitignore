@@ -12,4 +12,7 @@ build/
 frontend/.env
 backend/dataset/
 backend/dataset_cotton/
+backend/dataset_indian/
+*.parquet
+*.zip
 

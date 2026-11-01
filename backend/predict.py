@@ -8,8 +8,7 @@ import io
 try:
     from ai_edge_litert.interpreter import Interpreter as tflite_Interpreter
     def get_interpreter(model_path):
-        interp = tflite_Interpreter(model_path=model_path)
-        return interp
+        return tflite_Interpreter(model_path=model_path)
 except ImportError:
     try:
         import tflite_runtime.interpreter as tflite
@@ -21,402 +20,327 @@ except ImportError:
             return tf.lite.Interpreter(model_path=model_path)
 
 
-# Load models once on startup
 BASE = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE, "model", "model.tflite")
-CLASSES_PATH = os.path.join(BASE, "model", "class_names.json")
 
-# Disease Model
-interpreter = get_interpreter(MODEL_PATH)
-interpreter.allocate_tensors()
-input_details = interpreter.get_input_details()
-output_details = interpreter.get_output_details()
-
-# Bouncer Model (MobileNetV2 fine-tuned)
+# 1. Bouncer Model (MobileNetV2 Leaf vs Non-Leaf Gate)
 BOUNCER_MODEL_PATH = os.path.join(BASE, "model", "bouncer.tflite")
 bouncer_interpreter = get_interpreter(BOUNCER_MODEL_PATH)
 bouncer_interpreter.allocate_tensors()
 bouncer_input_details = bouncer_interpreter.get_input_details()
 bouncer_output_details = bouncer_interpreter.get_output_details()
 
-# Cotton & Pest Model
-COTTON_MODEL_PATH = os.path.join(BASE, "model", "cotton_pest.tflite")
-COTTON_CLASSES_PATH = os.path.join(BASE, "model", "cotton_classes.json")
-if os.path.exists(COTTON_MODEL_PATH) and os.path.exists(COTTON_CLASSES_PATH):
-    cotton_interpreter = get_interpreter(COTTON_MODEL_PATH)
-    cotton_interpreter.allocate_tensors()
-    cotton_input_details = cotton_interpreter.get_input_details()
-    cotton_output_details = cotton_interpreter.get_output_details()
-    with open(COTTON_CLASSES_PATH) as f:
-        COTTON_CLASS_NAMES = json.load(f)
+# 2. Top 10 Major Indian Crops Classifier
+INDIAN_MODEL_PATH = os.path.join(BASE, "model", "indian_crops.tflite")
+INDIAN_CLASSES_PATH = os.path.join(BASE, "model", "indian_classes.json")
+
+# Fallback to legacy model if indian_crops.tflite is still training
+if os.path.exists(INDIAN_MODEL_PATH) and os.path.exists(INDIAN_CLASSES_PATH):
+    PRIMARY_MODEL_PATH = INDIAN_MODEL_PATH
+    with open(INDIAN_CLASSES_PATH, "r", encoding="utf-8") as f:
+        CLASS_NAMES = json.load(f)
+    IS_INDIAN_MODEL = True
 else:
-    cotton_interpreter = None
-    COTTON_CLASS_NAMES = []
+    PRIMARY_MODEL_PATH = os.path.join(BASE, "model", "model.tflite")
+    with open(os.path.join(BASE, "model", "class_names.json"), "r", encoding="utf-8") as f:
+        CLASS_NAMES = json.load(f)
+    IS_INDIAN_MODEL = False
 
-with open(CLASSES_PATH) as f:
-    CLASS_NAMES = json.load(f)
+interpreter = get_interpreter(PRIMARY_MODEL_PATH)
+interpreter.allocate_tensors()
+input_details = interpreter.get_input_details()
+output_details = interpreter.get_output_details()
 
-print(f"[OK] Models loaded -- {len(CLASS_NAMES)} disease classes, {len(COTTON_CLASS_NAMES)} cotton/pest classes ready. Bouncer active.")
+print(f"[OK] Classifier loaded -- {len(CLASS_NAMES)} classes ready ({'Indian Crops v2' if IS_INDIAN_MODEL else 'Legacy'}). Bouncer active.")
 
 # ── Solutions database ─────────────────────────────────────────
 SOLUTIONS = {
+    # ── 1. Cotton ──────────────────────────────────────────────
     "Cotton___Bollworm": {
-        "cause": "Insect pest — Helicoverpa armigera (Cotton/American Bollworm)",
-        "symptoms": "Bored holes in flower buds and bolls with larval excreta (frass), dropped squares and damaged lint",
+        "cause": "Insect pest — Helicoverpa armigera (Cotton/American Bollworm) / Pectinophora gossypiella (Pink Bollworm)",
+        "symptoms": "Bored entry holes in flower buds and bolls plugged with dark frass pellets, dropped squares, larval chewing on leaves",
         "severity": "Severe",
-        "organic_cure": "Install pheromone traps (5 traps/acre). Spray Bacillus thuringiensis (Bt) formulation @ 2g/L or 5% Neem Seed Kernel Extract (NSKE).",
+        "organic_cure": "Install pheromone traps (5 traps/acre). Spray Bacillus thuringiensis (Bt) formulation @ 2g/L or 5% Neem Seed Kernel Extract (NSKE). Handpick visible larvae.",
         "chemical_cure": "Emamectin benzoate 5% SG @ 0.4g/L or Chlorantraniliprole 18.5% SC @ 0.3ml/L or Spinosad 45% SC @ 0.3ml/L",
-        "prevention": "Deep summer plowing, grow marigold or castor trap crops, handpick early instar larvae",
+        "prevention": "Deep summer plowing to expose pupae, grow marigold or castor trap crops on field borders, avoid excessive nitrogen",
         "recovery_time": "2-3 weeks — prompt control critical before bolls are penetrated"
     },
-    "Cotton___Bacterial_blight": {
+    "Cotton___Bacterial_Blight": {
         "cause": "Bacteria — Xanthomonas citri pv. malvacearum",
-        "symptoms": "Angular dark brown to black water-soaked leaf spots delineated by veins, black arm lesions on stems",
+        "symptoms": "Angular dark brown to black water-soaked leaf spots delineated by veins, black arm lesions on stems and petioles",
         "severity": "Moderate to Severe",
         "organic_cure": "Copper hydroxide spray @ 2g/L, bio-fungicide seed treatment with Pseudomonas fluorescens @ 10g/kg",
         "chemical_cure": "Copper oxychloride 50% WP @ 2.5g/L + Streptocycline @ 0.1g/L (1g per 10L water)",
         "prevention": "Use acid-delinted certified disease-free seeds, avoid sprinkler irrigation, remove infected debris",
         "recovery_time": "3-4 weeks"
     },
-    "Cotton___Curl_virus": {
-        "cause": "Virus — Cotton Leaf Curl Virus (CLCuV), transmitted by Whitefly (Bemisia tabaci)",
-        "symptoms": "Upward or downward leaf curling, vein thickening and enation on leaf undersides, stunted growth",
+    "Cotton___Curl_Virus": {
+        "cause": "Virus — Cotton Leaf Curl Virus (CLCuD), transmitted by Whitefly (Bemisia tabaci)",
+        "symptoms": "Upward or downward leaf curling, vein thickening and cup-like enations on leaf undersides, stunted bushy growth",
         "severity": "Severe",
         "organic_cure": "Install yellow sticky traps (10-15/acre) to trap whitefly vector. Spray Neem oil (10,000 ppm) @ 2ml/L.",
         "chemical_cure": "Vector control: Diafenthiuron 50% WP @ 1.2g/L or Imidacloprid 17.8% SL @ 0.5ml/L or Pyriproxyfen 10% EC @ 1ml/L",
-        "prevention": "Grow CLCuV-resistant cotton varieties, eradicate weed hosts around fields, crop rotation",
+        "prevention": "Grow CLCuD-resistant cotton varieties, eradicate weed hosts around fields, crop rotation",
         "recovery_time": "Focus is on vector suppression; infected foliage cannot be reversed"
     },
-    "Cotton___healthy": {
+    "Cotton___Healthy": {
         "cause": "None — Healthy Cotton Plant",
-        "symptoms": "Vibrant green leaves, uniform square development, healthy bolls with no lesions or pest feeding holes",
+        "symptoms": "Vibrant green broad leaves, uniform square development, clean bolls with no lesions or pest chew holes",
         "severity": "None",
         "organic_cure": "Continue balanced farmyard manure, vermicompost, and organic mulching",
         "chemical_cure": "No chemical application required",
         "prevention": "Maintain regular scheduled irrigation, balanced N-P-K nutrition, and weekly field scouting",
         "recovery_time": "Plant is healthy"
     },
-    "Tomato___Early_blight": {
-        "cause": "Fungus — Alternaria solani",
-        "symptoms": "Dark brown spots with yellow rings on lower leaves, spreads upward",
-        "severity": "Moderate",
-        "organic_cure": "Spray neem oil (5ml/L water) every 7 days. Remove infected leaves immediately.",
-        "chemical_cure": "Mancozeb 75% WP @ 2g/L or Chlorothalonil @ 2ml/L every 10 days",
-        "prevention": "Crop rotation every 2-3 years, avoid overhead watering, remove plant debris",
-        "recovery_time": "2-3 weeks with consistent treatment"
-    },
-    "Tomato___Late_blight": {
-        "cause": "Oomycete — Phytophthora infestans",
-        "symptoms": "Water-soaked dark lesions on leaves and stems, white fuzzy mold underneath",
+
+    # ── 2. Rice ───────────────────────────────────────────────
+    "Rice___Blast": {
+        "cause": "Fungus — Magnaporthe oryzae (Pyricularia oryzae)",
+        "symptoms": "Diamond-shaped or spindle-shaped lesions with grayish-white centers and reddish-brown borders; blackening of neck nodes",
         "severity": "Severe",
-        "organic_cure": "Copper-based spray (Bordeaux mixture 1%) every 5-7 days. Remove infected plants.",
-        "chemical_cure": "Metalaxyl + Mancozeb (Ridomil Gold) @ 2.5g/L, spray every 7 days",
-        "prevention": "Plant resistant varieties, ensure good air circulation, avoid wet foliage at night",
-        "recovery_time": "3-4 weeks — act immediately, spreads very rapidly"
+        "organic_cure": "Spray Pseudomonas fluorescens @ 10g/L, apply silica fertilizer to strengthen leaf cuticle, avoid excess nitrogen",
+        "chemical_cure": "Tricyclazole 75% WP @ 0.6g/L or Isoprothiolane 40% EC @ 1.5ml/L or Kasugamycin 3% SL @ 2ml/L",
+        "prevention": "Treat seeds with Tricyclazole @ 2g/kg, avoid excessive urea application, maintain continuous shallow water layer",
+        "recovery_time": "3-4 weeks — neck blast can cause severe yield loss if untreated before heading"
     },
-    "Tomato___Bacterial_spot": {
-        "cause": "Bacteria — Xanthomonas campestris",
-        "symptoms": "Small water-soaked spots on leaves, fruit with raised scab-like spots",
+    "Rice___Brown_Spot": {
+        "cause": "Fungus — Bipolaris oryzae (Cochliobolus miyabeanus)",
+        "symptoms": "Small oval to circular dark brown spots resembling sesame seeds with yellow halos scattered uniformly across leaves and glumes",
         "severity": "Moderate",
-        "organic_cure": "Copper hydroxide spray, remove infected plant parts, avoid overhead irrigation",
-        "chemical_cure": "Copper oxychloride @ 3g/L every 7-10 days",
-        "prevention": "Use disease-free certified seeds, crop rotation, avoid working in wet fields",
-        "recovery_time": "3-4 weeks"
-    },
-    "Tomato___Leaf_Miner": {
-        "cause": "Insect pest — Liriomyza trifolii larvae",
-        "symptoms": "Irregular white/yellow winding tunnels (mines) on leaf surface",
-        "severity": "Mild to Moderate",
-        "organic_cure": "Neem oil spray, yellow sticky traps, remove heavily mined leaves",
-        "chemical_cure": "Abamectin @ 0.5ml/L or Spinosad @ 0.3ml/L",
-        "prevention": "Use reflective mulch, monitor regularly, introduce natural predators",
+        "organic_cure": "Correct soil nutrient deficiency, apply balanced potassium and zinc, treat seeds with Trichoderma viride @ 5g/kg",
+        "chemical_cure": "Mancozeb 75% WP @ 2g/L or Propiconazole 25% EC @ 1ml/L at tillering and boot leaf stage",
+        "prevention": "Soil testing and balanced NPK + micronutrient application, use clean certified seed",
         "recovery_time": "2-3 weeks"
     },
-    "Tomato___Septoria_leaf_spot": {
-        "cause": "Fungus — Septoria lycopersici",
-        "symptoms": "Small circular spots with dark border and light gray center, lower leaves first",
-        "severity": "Moderate",
-        "organic_cure": "Remove infected leaves, copper-based fungicide, improve air circulation",
-        "chemical_cure": "Chlorothalonil or Mancozeb @ 2g/L every 7-10 days",
-        "prevention": "Avoid wetting leaves, mulch around base, crop rotation",
-        "recovery_time": "2-3 weeks"
-    },
-    "Tomato___Spider_mites Two-spotted_spider_mite": {
-        "cause": "Pest — Tetranychus urticae (tiny spider mites)",
-        "symptoms": "Yellow stippling on leaves, fine webbing under leaves, leaves turn bronze",
-        "severity": "Moderate",
-        "organic_cure": "Spray strong water jet to dislodge mites, neem oil spray, introduce predatory mites",
-        "chemical_cure": "Abamectin @ 0.5ml/L or Spiromesifen @ 1ml/L",
-        "prevention": "Maintain humidity, avoid dusty conditions, avoid broad-spectrum pesticides",
-        "recovery_time": "2-3 weeks"
-    },
-    "Tomato___Target_Spot": {
-        "cause": "Fungus — Corynespora cassiicola",
-        "symptoms": "Circular brown spots with concentric rings resembling a target on leaves",
-        "severity": "Moderate",
-        "organic_cure": "Remove infected leaves, neem oil spray, improve ventilation",
-        "chemical_cure": "Azoxystrobin or Difenoconazole @ 1ml/L",
-        "prevention": "Crop rotation, avoid excessive nitrogen, proper plant spacing",
-        "recovery_time": "2-3 weeks"
-    },
-    "Tomato___Tomato_Yellow_Leaf_Curl_Virus": {
-        "cause": "Virus — TYLCV transmitted by whiteflies",
-        "symptoms": "Yellowing and upward curling of leaves, stunted growth, flower drop",
-        "severity": "Severe",
-        "organic_cure": "Remove and destroy infected plants immediately, use reflective mulch to repel whiteflies",
-        "chemical_cure": "No cure for virus — control whitefly vector with Imidacloprid @ 0.5ml/L",
-        "prevention": "Use resistant varieties, install insect-proof nets, monitor whitefly populations",
-        "recovery_time": "No recovery — remove infected plants to prevent spread"
-    },
-    "Tomato___Tomato_mosaic_virus": {
-        "cause": "Virus — ToMV, spread by contact and tools",
-        "symptoms": "Mosaic pattern of light and dark green on leaves, distorted leaves, reduced yield",
-        "severity": "Moderate to Severe",
-        "organic_cure": "Remove infected plants, disinfect tools with bleach solution",
-        "chemical_cure": "No chemical cure — focus on prevention and removal",
-        "prevention": "Use virus-free certified seeds, wash hands before handling plants, control aphids",
-        "recovery_time": "No recovery — remove infected plants"
-    },
-    "Tomato___healthy": {
-        "cause": "None",
-        "symptoms": "No disease detected — plant looks healthy",
-        "severity": "None",
-        "organic_cure": "Not required",
-        "chemical_cure": "Not required",
-        "prevention": "Continue regular monitoring, balanced fertilization, proper watering",
-        "recovery_time": "Not applicable"
-    },
-    "Potato___Early_blight": {
-        "cause": "Fungus — Alternaria solani",
-        "symptoms": "Brown spots with concentric rings on older/lower leaves first",
-        "severity": "Moderate",
-        "organic_cure": "Neem oil spray, remove infected leaves, improve drainage",
-        "chemical_cure": "Mancozeb 75% WP @ 2g/L or Iprodione @ 2ml/L every 10 days",
-        "prevention": "Use certified disease-free seed tubers, crop rotation every 3 years",
-        "recovery_time": "2-3 weeks"
-    },
-    "Potato___Late_blight": {
-        "cause": "Oomycete — Phytophthora infestans",
-        "symptoms": "Dark water-soaked lesions on leaves, white sporulation under leaves in humid weather",
-        "severity": "Severe",
-        "organic_cure": "Bordeaux mixture spray, destroy infected plants immediately, do not compost",
-        "chemical_cure": "Cymoxanil + Mancozeb @ 3g/L every 7 days, Metalaxyl for severe cases",
-        "prevention": "Resistant varieties, avoid excessive irrigation, ensure good field drainage",
-        "recovery_time": "4-5 weeks — extremely destructive, act within 24 hours of detection"
-    },
-    "Potato___healthy": {
-        "cause": "None",
-        "symptoms": "No disease detected — plant looks healthy",
-        "severity": "None",
-        "organic_cure": "Not required",
-        "chemical_cure": "Not required",
-        "prevention": "Regular monitoring, balanced NPK fertilization",
-        "recovery_time": "Not applicable"
-    },
-    "Corn_(maize)___Common_rust_": {
-        "cause": "Fungus — Puccinia sorghi",
-        "symptoms": "Brick-red to brown pustules (raised bumps) scattered on both leaf surfaces",
-        "severity": "Moderate",
-        "organic_cure": "Sulfur-based fungicide spray, remove heavily infected leaves",
-        "chemical_cure": "Propiconazole @ 1ml/L or Tebuconazole @ 1ml/L, spray at first sign",
-        "prevention": "Plant resistant hybrids, early planting to avoid peak humidity season",
-        "recovery_time": "2-3 weeks"
-    },
-    "Corn_(maize)___Northern_Leaf_Blight": {
-        "cause": "Fungus — Exserohilum turcicum",
-        "symptoms": "Long gray-green to tan cigar-shaped lesions on leaves, starts on lower leaves",
-        "severity": "Moderate to Severe",
-        "organic_cure": "Remove infected leaves, improve air circulation, avoid dense planting",
-        "chemical_cure": "Azoxystrobin or Propiconazole @ 1ml/L at early tasseling stage",
-        "prevention": "Resistant varieties, crop rotation, balanced nitrogen fertilization",
-        "recovery_time": "3-4 weeks"
-    },
-    "Corn_(maize)___Cercospora_leaf_spot Gray_leaf_spot": {
-        "cause": "Fungus — Cercospora zeae-maydis",
-        "symptoms": "Rectangular gray to tan lesions with distinct borders, parallel to leaf veins",
-        "severity": "Moderate",
-        "organic_cure": "Improve field drainage, remove crop debris, avoid dense canopy",
-        "chemical_cure": "Strobilurin fungicides (Azoxystrobin) @ 1ml/L",
-        "prevention": "Resistant hybrids, crop rotation, reduce surface residue",
-        "recovery_time": "3-4 weeks"
-    },
-    "Corn_(maize)___healthy": {
-        "cause": "None",
-        "symptoms": "No disease detected — plant looks healthy",
-        "severity": "None",
-        "organic_cure": "Not required",
-        "chemical_cure": "Not required",
-        "prevention": "Balanced fertilization, proper spacing, regular monitoring",
-        "recovery_time": "Not applicable"
-    },
-    "Rice___Brown_spot": {
-        "cause": "Fungus — Cochliobolus miyabeanus",
-        "symptoms": "Oval to circular brown spots with yellow halo on leaves and grain",
-        "severity": "Moderate",
-        "organic_cure": "Seed treatment with hot water (52°C for 10 min), balanced potassium fertilization",
-        "chemical_cure": "Tricyclazole or Propiconazole @ 1ml/L at tillering and heading stages",
-        "prevention": "Use healthy certified seeds, balanced nutrition especially potassium and silicon",
-        "recovery_time": "2-3 weeks"
-    },
-    "Rice___Leaf_blast": {
-        "cause": "Fungus — Magnaporthe oryzae",
-        "symptoms": "Diamond-shaped gray lesions with brown borders on leaves, neck blast on panicle",
-        "severity": "Severe",
-        "organic_cure": "Silicon fertilization strengthens cell walls, avoid excess nitrogen",
-        "chemical_cure": "Tricyclazole 75% WP @ 0.6g/L or Isoprothiolane @ 1.5ml/L",
-        "prevention": "Resistant varieties, balanced nitrogen, avoid dense planting, drain fields periodically",
-        "recovery_time": "3-4 weeks — neck blast can cause 100% yield loss if untreated"
-    },
-    "Rice___Bacterial_leaf_blight": {
+    "Rice___Bacterial_Blight": {
         "cause": "Bacteria — Xanthomonas oryzae pv. oryzae",
-        "symptoms": "Water-soaked lesions on leaf margins turning yellow then white, wilting",
+        "symptoms": "Water-soaked stripes on leaf margins turning wavy yellow then bleaching white, bacterial ooze beads on young lesions",
         "severity": "Severe",
-        "organic_cure": "Drain flooded fields, avoid excess nitrogen, remove infected tillers",
-        "chemical_cure": "Copper oxychloride @ 3g/L, Streptomycin + Tetracycline combination",
-        "prevention": "Resistant varieties, balanced fertilization, avoid flood water movement between fields",
-        "recovery_time": "4-6 weeks"
+        "organic_cure": "Drain excess floodwater from field, reduce excess nitrogen fertilizer, spray fresh cow dung extract (20%)",
+        "chemical_cure": "Copper oxychloride 50% WP @ 2.5g/L + Streptocycline @ 0.1g/L (1g per 10L water)",
+        "prevention": "Grow resistant cultivars (e.g. Swarna Sub1, Improved Samba Mahsuri), avoid clipping seedling tips at transplanting",
+        "recovery_time": "3-4 weeks"
     },
-    "Rice___healthy": {
+    "Rice___Healthy": {
         "cause": "None",
-        "symptoms": "No disease detected — plant looks healthy",
+        "symptoms": "Vibrant green erect tillers, uniform canopy, healthy golden-yellow panicles with clean grains",
         "severity": "None",
         "organic_cure": "Not required",
         "chemical_cure": "Not required",
-        "prevention": "Balanced NPK, proper water management, regular field monitoring",
+        "prevention": "Alternate wetting and drying (AWD) water management, balanced NPK application",
         "recovery_time": "Not applicable"
     },
-    "Wheat___Yellow_Rust": {
-        "cause": "Fungus — Puccinia striiformis",
-        "symptoms": "Yellow-orange pustules in stripes along leaf veins, yellow powdery spores",
-        "severity": "Severe",
-        "organic_cure": "Remove infected plants, improve air circulation, avoid dense sowing",
-        "chemical_cure": "Propiconazole @ 1ml/L or Tebuconazole @ 1ml/L at first sign of disease",
-        "prevention": "Resistant varieties, balanced nitrogen, early sowing to avoid cool humid periods",
-        "recovery_time": "3-4 weeks"
+
+    # ── 3. Sugarcane ──────────────────────────────────────────
+    "Sugarcane___Red_Rot": {
+        "cause": "Fungus — Colletotrichum falcatum",
+        "symptoms": "Drying and yellowing of 3rd and 4th leaves from top, longitudinal reddening of cane interior with diagnostic white cross-bands, alcoholic sour odor",
+        "severity": "Critical (Severe)",
+        "organic_cure": "Uproot and burn diseased clumps immediately, treat seed setts with Trichoderma viride @ 10g/L",
+        "chemical_cure": "Sett treatment with Carbendazim 50% WP @ 1g/L for 15 minutes before planting; no curative spray once inside stalk",
+        "prevention": "Plant resistant varieties (e.g. Co 0238, Co 86032), practice 2-year crop rotation, avoid flood drainage across fields",
+        "recovery_time": "Systemic stalk infection cannot be reversed — rogue out affected stools immediately"
     },
-    "Wheat___Brown_rust": {
-        "cause": "Fungus — Puccinia triticina",
-        "symptoms": "Round to oval orange-brown pustules on upper leaf surface",
+    "Sugarcane___Yellow_Leaf": {
+        "cause": "Virus — Sugarcane Yellow Leaf Virus (SCYLV), transmitted by Sugarcane Aphid (Melanaphis sacchari)",
+        "symptoms": "Prominent yellowing of midrib on 3rd to 6th leaves from top, spreading outward to the leaf blade, bunching of leaves at crown",
+        "severity": "Moderate to Severe",
+        "organic_cure": "Spray insecticidal soap or Neem oil (10,000 ppm) @ 2ml/L to suppress sugarcane aphids",
+        "chemical_cure": "Vector control: Imidacloprid 17.8% SL @ 0.5ml/L or Thiamethoxam 25% WG @ 0.5g/L",
+        "prevention": "Plant virus-free tissue-cultured or heat-treated seed cane (MHAT 52°C for 30 min), control aphid colonies",
+        "recovery_time": "Focus is on vector control and clean seed cane for next ratoon"
+    },
+    "Sugarcane___Rust": {
+        "cause": "Fungus — Puccinia melanocephala",
+        "symptoms": "Elongated yellowish spots turning reddish-brown pustules on both surfaces of leaf blades, premature leaf drying",
         "severity": "Moderate",
-        "organic_cure": "Sulfur dust application, remove infected crop debris",
-        "chemical_cure": "Propiconazole 25% EC @ 1ml/L or Mancozeb @ 2.5g/L",
-        "prevention": "Resistant varieties, timely sowing, balanced fertilization",
+        "organic_cure": "Remove heavily rusted lower leaves, ensure good field drainage and air movement",
+        "chemical_cure": "Mancozeb 75% WP @ 2.5g/L or Propiconazole 25% EC @ 1ml/L at first appearance",
+        "prevention": "Avoid planting susceptible varieties in rust-prone areas, avoid excessive nitrogen",
         "recovery_time": "2-3 weeks"
     },
-    "Pepper,_bell___Bacterial_spot": {
-        "cause": "Bacteria — Xanthomonas campestris pv. vesicatoria",
-        "symptoms": "Water-soaked spots on leaves turning brown with yellow halo, fruit lesions",
-        "severity": "Moderate",
-        "organic_cure": "Copper-based spray, remove infected leaves, avoid overhead irrigation",
-        "chemical_cure": "Copper hydroxide @ 2g/L every 7-10 days",
-        "prevention": "Use certified seeds, crop rotation, avoid working in wet conditions",
-        "recovery_time": "3-4 weeks"
-    },
-    "Pepper,_bell___healthy": {
+    "Sugarcane___Healthy": {
         "cause": "None",
-        "symptoms": "No disease detected — plant looks healthy",
+        "symptoms": "Sturdy erect thick green canes, healthy broad leaf blades with clean midribs and vigorous stooling",
         "severity": "None",
         "organic_cure": "Not required",
         "chemical_cure": "Not required",
-        "prevention": "Regular monitoring, proper irrigation, balanced nutrition",
+        "prevention": "Trash mulching, balanced application of nitrogen and potash, regular field inspection",
         "recovery_time": "Not applicable"
     },
-    "Apple___Apple_scab": {
-        "cause": "Fungus — Venturia inaequalis",
-        "symptoms": "Olive-green to black scab-like lesions on leaves and fruit surface",
-        "severity": "Moderate",
-        "organic_cure": "Sulfur spray every 7-10 days, remove fallen infected leaves",
-        "chemical_cure": "Captan or Myclobutanil @ 2g/L from green tip stage",
-        "prevention": "Resistant varieties, remove fallen leaves, prune for air circulation",
-        "recovery_time": "3-4 weeks"
-    },
-    "Apple___Black_rot": {
-        "cause": "Fungus — Botryosphaeria obtusa",
-        "symptoms": "Purple spots on leaves, fruit with concentric ring rot turning black",
+
+    # ── 4. Wheat ──────────────────────────────────────────────
+    "Wheat___Rust": {
+        "cause": "Fungus — Puccinia striiformis (Yellow Rust) / Puccinia triticina (Brown Rust) / Puccinia graminis (Black Rust)",
+        "symptoms": "Bright yellow-orange powdery pustules in stripes along leaf veins; or scattered orange-brown pustules on leaf blades",
         "severity": "Severe",
-        "organic_cure": "Remove mummified fruit, prune dead wood, copper spray",
-        "chemical_cure": "Captan or Thiophanate-methyl @ 2g/L",
-        "prevention": "Remove dead wood and mummified fruit, maintain tree vigor",
-        "recovery_time": "4-6 weeks"
+        "organic_cure": "Foliar spray of neem seed kernel extract (5%), destroy self-sown wheat plants and weed hosts",
+        "chemical_cure": "Propiconazole 25% EC (Tilt) @ 1ml/L (200ml/acre) or Tebuconazole 25.9% EC @ 1ml/L immediately at first sign",
+        "prevention": "Cultivate rust-resistant varieties (e.g. DBW 187, DBW 222, HD 3226), timely sowing in November",
+        "recovery_time": "2-3 weeks — prompt spray critical to stop fungal sporulation before flag leaf infection"
     },
-    "Apple___Cedar_apple_rust": {
-        "cause": "Fungus — Gymnosporangium juniperi-virginianae",
-        "symptoms": "Bright orange-yellow spots on upper leaf surface, tube-like structures below",
-        "severity": "Moderate",
-        "organic_cure": "Remove nearby juniper/cedar trees if possible, sulfur spray",
-        "chemical_cure": "Myclobutanil or Propiconazole @ 1ml/L from pink bud stage",
-        "prevention": "Resistant apple varieties, remove alternate hosts (junipers) nearby",
-        "recovery_time": "2-3 weeks per season"
-    },
-    "Apple___healthy": {
+    "Wheat___Healthy": {
         "cause": "None",
-        "symptoms": "No disease detected — plant looks healthy",
+        "symptoms": "Uniform green tillers, clean erect flag leaves, well-filled spikelets with golden awns and healthy grain",
         "severity": "None",
         "organic_cure": "Not required",
         "chemical_cure": "Not required",
-        "prevention": "Regular pruning, balanced fertilization, pest monitoring",
+        "prevention": "Timely crown root irrigation and balanced NPK fertilization",
         "recovery_time": "Not applicable"
     },
-    "Grape___Black_rot": {
-        "cause": "Fungus — Guignardia bidwellii",
-        "symptoms": "Tan spots with dark borders on leaves, fruit shrivels to black mummies",
+
+    # ── 5. Maize ──────────────────────────────────────────────
+    "Maize___Fall_Armyworm": {
+        "cause": "Insect pest — Spodoptera frugiperda (Fall Armyworm)",
+        "symptoms": "Window-paning on young leaves, ragged shot-hole feeding damage, moist sawdust-like frass packed in leaf whorl",
         "severity": "Severe",
-        "organic_cure": "Remove mummified fruit and infected canes, copper spray",
-        "chemical_cure": "Myclobutanil or Captan @ 2g/L from early shoot growth",
-        "prevention": "Remove all mummified fruit, proper canopy management for air flow",
-        "recovery_time": "4-6 weeks — can cause 100% fruit loss if untreated"
+        "organic_cure": "Handpick egg masses and larvae, apply neem cake into the leaf whorl, spray Nomuraea rileyi or Bt @ 2g/L",
+        "chemical_cure": "Chlorantraniliprole 18.5% SC @ 0.4ml/L or Emamectin benzoate 5% SG @ 0.4g/L directed into the leaf whorl",
+        "prevention": "Deep summer plowing, intercrop with cowpea or pulses, erect pheromone traps @ 5/acre",
+        "recovery_time": "2-3 weeks if sprayed before larvae bore deep into the stem/cob"
     },
-    "Grape___Esca_(Black_Measles)": {
-        "cause": "Fungal complex — Phaeomoniella, Phaeoacremonium, Fomitiporia",
-        "symptoms": "Tiger-stripe pattern on leaves, dark streaking in wood, berry shriveling",
-        "severity": "Severe",
-        "organic_cure": "No effective organic cure — remove and destroy infected vines",
-        "chemical_cure": "No effective chemical cure — prevention is critical",
-        "prevention": "Protect pruning wounds with fungicide paste, use clean pruning tools",
-        "recovery_time": "No recovery — infected vines decline over years"
-    },
-    "Grape___Leaf_blight_(Isariopsis_Leaf_Spot)": {
-        "cause": "Fungus — Pseudocercospora vitis",
-        "symptoms": "Angular dark brown spots on older leaves, premature defoliation",
-        "severity": "Moderate",
-        "organic_cure": "Remove infected leaves, copper spray, improve air circulation",
-        "chemical_cure": "Mancozeb or Captan @ 2g/L every 10-14 days",
-        "prevention": "Proper canopy management, avoid overhead irrigation",
+    "Maize___Blight_Rust": {
+        "cause": "Fungus — Exserohilum turcicum (Northern Leaf Blight) or Puccinia sorghi (Common Rust)",
+        "symptoms": "Long elliptical grayish-green cigar-shaped lesions or brick-red powdery pustules on foliage",
+        "severity": "Moderate to Severe",
+        "organic_cure": "Spray copper oxychloride @ 2.5g/L, remove lower diseased leaves to improve aeration",
+        "chemical_cure": "Azoxystrobin 18.2% + Difenoconazole 11.4% SC @ 1ml/L or Mancozeb 75% WP @ 2.5g/L",
+        "prevention": "Plant resistant hybrid seeds, crop rotation with legumes, avoid high plant density",
         "recovery_time": "3-4 weeks"
     },
-    "Grape___healthy": {
+    "Maize___Healthy": {
         "cause": "None",
-        "symptoms": "No disease detected — plant looks healthy",
+        "symptoms": "Robust dark green leaves, sturdy stalk, uniform tassel and ear development with no chew damage",
         "severity": "None",
         "organic_cure": "Not required",
         "chemical_cure": "Not required",
-        "prevention": "Regular pruning, balanced nutrition, proper trellis management",
+        "prevention": "Balanced nitrogen application in split doses, maintain optimal soil moisture",
+        "recovery_time": "Not applicable"
+    },
+
+    # ── 6. Chilli ─────────────────────────────────────────────
+    "Chilli___Leaf_Curl": {
+        "cause": "Begomovirus (Chilli Leaf Curl Virus) transmitted by Whitefly (Bemisia tabaci) or severe Thrips feeding",
+        "symptoms": "Upward curling and puckering of leaves, vein thickening, stunted bushy plant growth",
+        "severity": "Severe",
+        "organic_cure": "Spray Neem oil (10,000 ppm) @ 2ml/L, install yellow and blue sticky traps (15-20/acre)",
+        "chemical_cure": "Control whitefly/thrips vector: Diafenthiuron 50% WP @ 1.2g/L or Fipronil 5% SC @ 1.5ml/L or Imidacloprid 17.8% SL @ 0.5ml/L",
+        "prevention": "Grow border crops (maize/sorghum) to block whiteflies, rogue out infected plants early",
+        "recovery_time": "Vector control halts new spread; curled foliage cannot be reversed"
+    },
+    "Chilli___Anthracnose": {
+        "cause": "Fungus — Colletotrichum capsici",
+        "symptoms": "Circular sunken lesions on fruits with concentric rings of dark acervuli, die-back of twigs",
+        "severity": "Severe",
+        "organic_cure": "Spray 5% Neem Seed Kernel Extract (NSKE) or Trichoderma viride @ 5g/L",
+        "chemical_cure": "Azoxystrobin 23% SC @ 1ml/L or Difenoconazole 25% EC @ 1ml/L or Mancozeb 75% WP @ 2.5g/L",
+        "prevention": "Use disease-free certified seeds, treat seeds with Thiram @ 3g/kg, avoid overhead sprinkler irrigation",
+        "recovery_time": "2-3 weeks"
+    },
+    "Chilli___Healthy": {
+        "cause": "None",
+        "symptoms": "Vigorous dark green foliage, abundant flowering and glossy green pods without spots",
+        "severity": "None",
+        "organic_cure": "Not required — continue vermicompost and balanced neem cake application",
+        "chemical_cure": "Not required",
+        "prevention": "Maintain regular drip irrigation and scout for sucking pests",
+        "recovery_time": "Not applicable"
+    },
+
+    # ── 7. Mustard ────────────────────────────────────────────
+    "Mustard___Blight_WhiteRust": {
+        "cause": "Fungus — Alternaria brassicae (Blight) or Albugo candida (White Rust)",
+        "symptoms": "Dark brown spots with concentric target rings on leaves and pods; raised white blister pustules on leaf undersides",
+        "severity": "Moderate to Severe",
+        "organic_cure": "Spray Trichoderma harzianum @ 5g/L or 5% Neem extract, remove infected lower leaves",
+        "chemical_cure": "Metalaxyl 8% + Mancozeb 64% WP (Ridomil MZ) @ 2g/L or Iprodione 50% WP @ 2g/L",
+        "prevention": "Timely sowing in mid-October to escape aphid/disease peak, clean cultivation, certified seeds",
+        "recovery_time": "2-3 weeks"
+    },
+    "Mustard___Healthy": {
+        "cause": "None",
+        "symptoms": "Healthy broad green foliage, vigorous branching, vibrant yellow flower clusters and firm green siliquae (pods)",
+        "severity": "None",
+        "organic_cure": "Not required",
+        "chemical_cure": "Not required",
+        "prevention": "Timely irrigation at flowering and pod development stages",
+        "recovery_time": "Not applicable"
+    },
+
+    # ── 8. Soybean ────────────────────────────────────────────
+    "Soybean___Diseased": {
+        "cause": "Fungus / Bacteria — Phakopsora pachyrhizi (Rust) or Cercospora sojina (Frogeye) or Xanthomonas (Bacterial Blight)",
+        "symptoms": "Small brown to reddish-brown lesions or pustules on leaves, circular tan spots with purple borders, premature leaf drop",
+        "severity": "Moderate to Severe",
+        "organic_cure": "Spray Pseudomonas fluorescens @ 5g/L, apply neem oil (5ml/L) at early vegetative stage",
+        "chemical_cure": "Hexaconazole 5% EC @ 1.5ml/L or Pyraclostrobin 20% WG @ 1g/L or Carbendazim 12% + Mancozeb 63% WP @ 2g/L",
+        "prevention": "Grow rust-tolerant varieties, avoid water stagnation, practice 2-year crop rotation with maize or sorghum",
+        "recovery_time": "2-3 weeks"
+    },
+    "Soybean___Healthy": {
+        "cause": "None",
+        "symptoms": "Dense dark green trifoliate leaves, strong branching, abundant pod setting with clean green pods",
+        "severity": "None",
+        "organic_cure": "Not required",
+        "chemical_cure": "Not required",
+        "prevention": "Maintain adequate soil moisture during pod filling stage, monitor for defoliating caterpillars",
+        "recovery_time": "Not applicable"
+    },
+
+    # ── 9. Potato ─────────────────────────────────────────────
+    "Potato___Blight": {
+        "cause": "Oomycete / Fungus — Phytophthora infestans (Late Blight) or Alternaria solani (Early Blight)",
+        "symptoms": "Water-soaked irregular dark lesions rapidly turning brown with white downy growth underneath in humid conditions",
+        "severity": "Severe",
+        "organic_cure": "Spray Bordeaux mixture (1%) or copper hydroxide @ 2g/L, remove blighted haulms before harvest",
+        "chemical_cure": "Cymoxanil 8% + Mancozeb 64% WP @ 2.5g/L or Dimethomorph 50% WP @ 1g/L",
+        "prevention": "Plant certified disease-free seed tubers, ensure high earthing-up to protect tubers, proper drainage",
+        "recovery_time": "3-4 weeks — act immediately within 24 hours of first symptom"
+    },
+    "Potato___Healthy": {
+        "cause": "None",
+        "symptoms": "Lush green bushy canopy with no spotting, firm stems, healthy tuber development beneath soil",
+        "severity": "None",
+        "organic_cure": "Not required",
+        "chemical_cure": "Not required",
+        "prevention": "Timely earthing-up, balanced potassium and phosphorus application",
+        "recovery_time": "Not applicable"
+    },
+
+    # ── 10. Tomato ────────────────────────────────────────────
+    "Tomato___Blight_LeafCurl": {
+        "cause": "Oomycete / Fungus / Begomovirus — Phytophthora infestans (Late Blight) or Alternaria (Early Blight) or TYLCV",
+        "symptoms": "Concentric dark target spots or water-soaked brown patches; upward curling, yellow margins and stunted crinkled growth",
+        "severity": "Severe",
+        "organic_cure": "Copper hydroxide spray @ 2g/L or Neem oil (10,000 ppm) @ 2ml/L, yellow sticky traps for whitefly control",
+        "chemical_cure": "Metalaxyl 8% + Mancozeb 64% WP @ 2.5g/L for blights; Diafenthiuron 50% WP @ 1.2g/L for whitefly vector",
+        "prevention": "Stake plants to keep foliage off ground, crop rotation, avoid wetting leaves during irrigation",
+        "recovery_time": "2-3 weeks"
+    },
+    "Tomato___Healthy": {
+        "cause": "None",
+        "symptoms": "Deep green healthy compound leaves, strong branching, abundant blossoms and clean glossy fruit",
+        "severity": "None",
+        "organic_cure": "Not required",
+        "chemical_cure": "Not required",
+        "prevention": "Consistent drip irrigation, balanced calcium and potassium fertilization to prevent blossom end rot",
         "recovery_time": "Not applicable"
     },
 }
 
-def get_solution(class_name):
-    # Try exact match
+def get_solution(class_name: str) -> dict:
     if class_name in SOLUTIONS:
         return SOLUTIONS[class_name]
-    # Try normalised match
-    normalised = class_name.replace(" ", "_").replace("-", "_")
     for key in SOLUTIONS:
-        if key.lower() == normalised.lower():
+        if key.lower() == class_name.lower():
             return SOLUTIONS[key]
-    # Partial match
-    for key in SOLUTIONS:
-        if key.lower() in class_name.lower() or class_name.lower() in key.lower():
-            return SOLUTIONS[key]
-    # Default fallback
     is_healthy = "healthy" in class_name.lower()
     return {
-        "cause": "Not required" if is_healthy else "Consult local agricultural extension officer",
+        "cause": "None" if is_healthy else "Consult local agricultural extension officer",
         "symptoms": "Plant appears healthy" if is_healthy else "Disease detected — expert consultation recommended",
-        "severity": "None" if is_healthy else "Unknown",
-        "organic_cure": "Not required" if is_healthy else "Consult your local KVK office",
+        "severity": "None" if is_healthy else "Moderate",
+        "organic_cure": "Not required" if is_healthy else "Spray 5% Neem extract, consult your local KVK office",
         "chemical_cure": "Not required" if is_healthy else "Consult your local KVK office",
-        "prevention": "Continue good agricultural practices",
+        "prevention": "Continue good agricultural practices and regular monitoring",
         "recovery_time": "Not applicable" if is_healthy else "Consult local expert"
     }
 
@@ -425,101 +349,48 @@ def diagnose_crop(image_bytes: bytes, media_type: str = "image/jpeg") -> dict:
         # Preprocess base image
         image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
         image = image.resize((224, 224))
-        
-        # --- 1) BOUNCER GATE (Leaves vs Garbage) ---
-        # The Bouncer model expects [0, 255] float32 input (preprocessing is built into the model)
+
+        # --- 1) BOUNCER GATE (Leaf vs Non-Leaf Object Gate) ---
+        # Bouncer model expects [0, 255] float32 input (preprocessing is built into model)
         bouncer_array = np.array(image, dtype=np.float32)
         bouncer_array = np.expand_dims(bouncer_array, axis=0)
 
         bouncer_interpreter.set_tensor(bouncer_input_details[0]['index'], bouncer_array)
         bouncer_interpreter.invoke()
-        bouncer_pred = bouncer_interpreter.get_tensor(bouncer_output_details[0]['index'])[0][0]
+        bouncer_pred = float(bouncer_interpreter.get_tensor(bouncer_output_details[0]['index'])[0][0])
 
-        print(f"[DEBUG] Bouncer Leaf Probability: {bouncer_pred}")
+        print(f"[DEBUG] Bouncer Leaf Probability: {bouncer_pred:.4f}")
 
-        # --- 2) COTTON & PEST PREDICTION ---
-        cotton_result = None
-        if cotton_interpreter is not None:
-            # Cotton model expects [0, 255] float32 input (preprocessing is built into the model)
-            cotton_array = np.array(image, dtype=np.float32)
-            cotton_array = np.expand_dims(cotton_array, axis=0)
-            cotton_interpreter.set_tensor(cotton_input_details[0]['index'], cotton_array)
-            cotton_interpreter.invoke()
-            cotton_preds = cotton_interpreter.get_tensor(cotton_output_details[0]['index'])[0]
-
-            cotton_top_idx = int(np.argmax(cotton_preds))
-            cotton_class = COTTON_CLASS_NAMES[cotton_top_idx]
-            cotton_conf = float(cotton_preds[cotton_top_idx])
-            print(f"[DEBUG] Cotton Classifier: {cotton_class} ({cotton_conf:.2%})")
-
-            # High-confidence Cotton diagnosis:
-            # - If bouncer passed (>= 0.50): require >= 60% cotton confidence
-            # - If bouncer flagged non-leaf (< 0.50) but pest/boll is very distinct: require >= 85% confidence
-            min_conf = 0.60 if bouncer_pred >= 0.50 else 0.85
-            if cotton_class != "Other_Crop" and cotton_conf >= min_conf:
-                is_healthy = "healthy" in cotton_class.lower()
-                solution = get_solution(cotton_class)
-                disease_name = "Healthy" if is_healthy else cotton_class.split("___")[1].replace("_", " ").title()
-                
-                # Format top 3 from cotton predictions
-                c_top3_idx = np.argsort(cotton_preds)[-3:][::-1]
-                c_top3 = [
-                    {
-                        "disease": COTTON_CLASS_NAMES[i].replace("___", " — ").replace("_", " "),
-                        "confidence": f"{cotton_preds[i]:.1%}"
-                    }
-                    for i in c_top3_idx
-                ]
-
-                cotton_result = {
-                    "crop": "Cotton",
-                    "disease": disease_name,
-                    "is_healthy": is_healthy,
-                    "confidence": f"{cotton_conf:.1%}",
-                    "confidence_score": round(cotton_conf, 4),
-                    "severity": solution["severity"],
-                    "cause": solution["cause"],
-                    "symptoms": solution["symptoms"],
-                    "organic_cure": solution["organic_cure"],
-                    "chemical_cure": solution["chemical_cure"],
-                    "prevention": solution["prevention"],
-                    "recovery_time": solution["recovery_time"],
-                    "top_predictions": c_top3
-                }
-
-        if cotton_result is not None:
-            return cotton_result
-
-        # If not a recognized Cotton condition and bouncer rejected, block immediately
-        if bouncer_pred < 0.50:
+        # If bouncer rejects as garbage/non-leaf, block immediately
+        if bouncer_pred < 0.40:
             return {
                 "error": "not_a_crop",
                 "message": "We couldn't detect a clear leaf in this photo. Please try again."
             }
 
-        # --- 3) STANDARD 14-CROP DISEASE PREDICTION ---
-        # Disease model expects [0, 1] normalization
-        img_array = np.array(image, dtype=np.float32) / 255.0
-        img_array = np.expand_dims(img_array, axis=0)
+        # --- 2) TOP 10 INDIAN CROPS CLASSIFIER ---
+        # Model expects [0, 255] float32 input (preprocessing is built into inference graph)
+        crop_array = np.array(image, dtype=np.float32)
+        crop_array = np.expand_dims(crop_array, axis=0)
 
-        # Run TFLite inference
-        interpreter.set_tensor(input_details[0]['index'], img_array)
+        interpreter.set_tensor(input_details[0]['index'], crop_array)
         interpreter.invoke()
         predictions = interpreter.get_tensor(output_details[0]['index'])[0]
 
-        # Get top result
         top_idx = int(np.argmax(predictions))
         confidence = float(predictions[top_idx])
         class_name = CLASS_NAMES[top_idx]
 
-        # Out-of-Distribution Guard: If confidence < 45%, reject forced incorrect prediction
-        if confidence < 0.45:
+        print(f"[DEBUG] Crop Classifier: {class_name} ({confidence:.2%})")
+
+        # Out-of-Distribution Guard: If confidence < 40%, reject forced incorrect diagnosis
+        if confidence < 0.40:
             return {
                 "error": "not_a_crop",
                 "message": "We detected plant foliage, but the symptoms do not match our recognized crops or pests. Please try a clearer close-up photo."
             }
 
-        # Get top 3 predictions
+        # Top 3 predictions
         top3_idx = np.argsort(predictions)[-3:][::-1]
         top3 = [
             {
@@ -529,18 +400,14 @@ def diagnose_crop(image_bytes: bytes, media_type: str = "image/jpeg") -> dict:
             for i in top3_idx
         ]
 
-        is_healthy = "healthy" in class_name.lower()
-        solution = get_solution(class_name)
+        # Extract crop and disease
+        parts = class_name.split("___")
+        crop_name = parts[0].replace("_", " ").strip()
+        raw_disease = parts[1] if len(parts) > 1 else class_name
+        is_healthy = "healthy" in raw_disease.lower()
+        disease_name = "Healthy" if is_healthy else raw_disease.replace("_", " ").title()
 
-        # Clean up display names — use lookup first, fall back to string cleaning
-        CROP_CLEAN_NAMES = {
-            "Corn (maize)": "Corn",
-            "Pepper, bell": "Bell Pepper",
-        }
-        parts = class_name.replace("___", "|").split("|")
-        crop_raw = parts[0].replace("_", " ").strip()
-        crop_name = CROP_CLEAN_NAMES.get(crop_raw, crop_raw)
-        disease_name = "Healthy" if is_healthy else parts[1].replace("_", " ").strip() if len(parts) > 1 else class_name
+        solution = get_solution(class_name)
 
         return {
             "crop": crop_name,
