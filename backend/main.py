@@ -42,6 +42,7 @@ CROP_NATIVE_NAMES = {
         "Soybean":     "सोयाबीन",
         "Blueberry":   "ब्लूबेरी",
         "Orange":      "संतरा",
+        "Cotton":      "कपास",
     },
     "marathi": {
         "Tomato":      "टोमॅटो",
@@ -58,7 +59,12 @@ CROP_NATIVE_NAMES = {
         "Soybean":     "सोयाबीन",
         "Blueberry":   "ब्लूबेरी",
         "Orange":      "संतरा",
+        "Cotton":      "कापूस",
     },
+    "hinglish": {
+        "Cotton":      "Kapas (Cotton)",
+    },
+
     "hinglish": {
         "Tomato":      "Tamatar",
         "Potato":      "Aloo",
@@ -187,6 +193,12 @@ Do NOT output English sentences unless specifically asked to keep technical name
 
 async def translate_result(result: dict, language: str) -> dict:
     """Translate static disease fields into the requested language."""
+    # Apply static crop name translation first (works even offline without Groq)
+    native_crops = CROP_NATIVE_NAMES.get(language, {})
+    native_crop = native_crops.get(result.get("crop", ""))
+    if native_crop:
+        result["crop"] = native_crop
+
     if language == "english" or not GROQ_API_KEY:
         return result
 

@@ -39,13 +39,63 @@ bouncer_interpreter.allocate_tensors()
 bouncer_input_details = bouncer_interpreter.get_input_details()
 bouncer_output_details = bouncer_interpreter.get_output_details()
 
+# Cotton & Pest Model
+COTTON_MODEL_PATH = os.path.join(BASE, "model", "cotton_pest.tflite")
+COTTON_CLASSES_PATH = os.path.join(BASE, "model", "cotton_classes.json")
+if os.path.exists(COTTON_MODEL_PATH) and os.path.exists(COTTON_CLASSES_PATH):
+    cotton_interpreter = get_interpreter(COTTON_MODEL_PATH)
+    cotton_interpreter.allocate_tensors()
+    cotton_input_details = cotton_interpreter.get_input_details()
+    cotton_output_details = cotton_interpreter.get_output_details()
+    with open(COTTON_CLASSES_PATH) as f:
+        COTTON_CLASS_NAMES = json.load(f)
+else:
+    cotton_interpreter = None
+    COTTON_CLASS_NAMES = []
+
 with open(CLASSES_PATH) as f:
     CLASS_NAMES = json.load(f)
 
-print(f"[OK] Models loaded -- {len(CLASS_NAMES)} disease classes ready. Bouncer gate active.")
+print(f"[OK] Models loaded -- {len(CLASS_NAMES)} disease classes, {len(COTTON_CLASS_NAMES)} cotton/pest classes ready. Bouncer active.")
 
 # ── Solutions database ─────────────────────────────────────────
 SOLUTIONS = {
+    "Cotton___Bollworm": {
+        "cause": "Insect pest — Helicoverpa armigera (Cotton/American Bollworm)",
+        "symptoms": "Bored holes in flower buds and bolls with larval excreta (frass), dropped squares and damaged lint",
+        "severity": "Severe",
+        "organic_cure": "Install pheromone traps (5 traps/acre). Spray Bacillus thuringiensis (Bt) formulation @ 2g/L or 5% Neem Seed Kernel Extract (NSKE).",
+        "chemical_cure": "Emamectin benzoate 5% SG @ 0.4g/L or Chlorantraniliprole 18.5% SC @ 0.3ml/L or Spinosad 45% SC @ 0.3ml/L",
+        "prevention": "Deep summer plowing, grow marigold or castor trap crops, handpick early instar larvae",
+        "recovery_time": "2-3 weeks — prompt control critical before bolls are penetrated"
+    },
+    "Cotton___Bacterial_blight": {
+        "cause": "Bacteria — Xanthomonas citri pv. malvacearum",
+        "symptoms": "Angular dark brown to black water-soaked leaf spots delineated by veins, black arm lesions on stems",
+        "severity": "Moderate to Severe",
+        "organic_cure": "Copper hydroxide spray @ 2g/L, bio-fungicide seed treatment with Pseudomonas fluorescens @ 10g/kg",
+        "chemical_cure": "Copper oxychloride 50% WP @ 2.5g/L + Streptocycline @ 0.1g/L (1g per 10L water)",
+        "prevention": "Use acid-delinted certified disease-free seeds, avoid sprinkler irrigation, remove infected debris",
+        "recovery_time": "3-4 weeks"
+    },
+    "Cotton___Curl_virus": {
+        "cause": "Virus — Cotton Leaf Curl Virus (CLCuV), transmitted by Whitefly (Bemisia tabaci)",
+        "symptoms": "Upward or downward leaf curling, vein thickening and enation on leaf undersides, stunted growth",
+        "severity": "Severe",
+        "organic_cure": "Install yellow sticky traps (10-15/acre) to trap whitefly vector. Spray Neem oil (10,000 ppm) @ 2ml/L.",
+        "chemical_cure": "Vector control: Diafenthiuron 50% WP @ 1.2g/L or Imidacloprid 17.8% SL @ 0.5ml/L or Pyriproxyfen 10% EC @ 1ml/L",
+        "prevention": "Grow CLCuV-resistant cotton varieties, eradicate weed hosts around fields, crop rotation",
+        "recovery_time": "Focus is on vector suppression; infected foliage cannot be reversed"
+    },
+    "Cotton___healthy": {
+        "cause": "None — Healthy Cotton Plant",
+        "symptoms": "Vibrant green leaves, uniform square development, healthy bolls with no lesions or pest feeding holes",
+        "severity": "None",
+        "organic_cure": "Continue balanced farmyard manure, vermicompost, and organic mulching",
+        "chemical_cure": "No chemical application required",
+        "prevention": "Maintain regular scheduled irrigation, balanced N-P-K nutrition, and weekly field scouting",
+        "recovery_time": "Plant is healthy"
+    },
     "Tomato___Early_blight": {
         "cause": "Fungus — Alternaria solani",
         "symptoms": "Dark brown spots with yellow rings on lower leaves, spreads upward",
@@ -386,14 +436,68 @@ def diagnose_crop(image_bytes: bytes, media_type: str = "image/jpeg") -> dict:
         bouncer_pred = bouncer_interpreter.get_tensor(bouncer_output_details[0]['index'])[0][0]
 
         print(f"[DEBUG] Bouncer Leaf Probability: {bouncer_pred}")
-        # bouncer_pred represents probability of Class 1 (Leaf)
+
+        # --- 2) COTTON & PEST PREDICTION ---
+        cotton_result = None
+        if cotton_interpreter is not None:
+            # Cotton model expects [0, 255] float32 input (preprocessing is built into the model)
+            cotton_array = np.array(image, dtype=np.float32)
+            cotton_array = np.expand_dims(cotton_array, axis=0)
+            cotton_interpreter.set_tensor(cotton_input_details[0]['index'], cotton_array)
+            cotton_interpreter.invoke()
+            cotton_preds = cotton_interpreter.get_tensor(cotton_output_details[0]['index'])[0]
+
+            cotton_top_idx = int(np.argmax(cotton_preds))
+            cotton_class = COTTON_CLASS_NAMES[cotton_top_idx]
+            cotton_conf = float(cotton_preds[cotton_top_idx])
+            print(f"[DEBUG] Cotton Classifier: {cotton_class} ({cotton_conf:.2%})")
+
+            # High-confidence Cotton diagnosis:
+            # - If bouncer passed (>= 0.50): require >= 60% cotton confidence
+            # - If bouncer flagged non-leaf (< 0.50) but pest/boll is very distinct: require >= 85% confidence
+            min_conf = 0.60 if bouncer_pred >= 0.50 else 0.85
+            if cotton_class != "Other_Crop" and cotton_conf >= min_conf:
+                is_healthy = "healthy" in cotton_class.lower()
+                solution = get_solution(cotton_class)
+                disease_name = "Healthy" if is_healthy else cotton_class.split("___")[1].replace("_", " ").title()
+                
+                # Format top 3 from cotton predictions
+                c_top3_idx = np.argsort(cotton_preds)[-3:][::-1]
+                c_top3 = [
+                    {
+                        "disease": COTTON_CLASS_NAMES[i].replace("___", " — ").replace("_", " "),
+                        "confidence": f"{cotton_preds[i]:.1%}"
+                    }
+                    for i in c_top3_idx
+                ]
+
+                cotton_result = {
+                    "crop": "Cotton",
+                    "disease": disease_name,
+                    "is_healthy": is_healthy,
+                    "confidence": f"{cotton_conf:.1%}",
+                    "confidence_score": round(cotton_conf, 4),
+                    "severity": solution["severity"],
+                    "cause": solution["cause"],
+                    "symptoms": solution["symptoms"],
+                    "organic_cure": solution["organic_cure"],
+                    "chemical_cure": solution["chemical_cure"],
+                    "prevention": solution["prevention"],
+                    "recovery_time": solution["recovery_time"],
+                    "top_predictions": c_top3
+                }
+
+        if cotton_result is not None:
+            return cotton_result
+
+        # If not a recognized Cotton condition and bouncer rejected, block immediately
         if bouncer_pred < 0.50:
             return {
                 "error": "not_a_crop",
                 "message": "We couldn't detect a clear leaf in this photo. Please try again."
             }
 
-        # --- 2) DISEASE PREDICTION ---
+        # --- 3) STANDARD 14-CROP DISEASE PREDICTION ---
         # Disease model expects [0, 1] normalization
         img_array = np.array(image, dtype=np.float32) / 255.0
         img_array = np.expand_dims(img_array, axis=0)
@@ -407,6 +511,13 @@ def diagnose_crop(image_bytes: bytes, media_type: str = "image/jpeg") -> dict:
         top_idx = int(np.argmax(predictions))
         confidence = float(predictions[top_idx])
         class_name = CLASS_NAMES[top_idx]
+
+        # Out-of-Distribution Guard: If confidence < 45%, reject forced incorrect prediction
+        if confidence < 0.45:
+            return {
+                "error": "not_a_crop",
+                "message": "We detected plant foliage, but the symptoms do not match our recognized crops or pests. Please try a clearer close-up photo."
+            }
 
         # Get top 3 predictions
         top3_idx = np.argsort(predictions)[-3:][::-1]
