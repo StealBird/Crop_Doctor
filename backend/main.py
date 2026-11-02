@@ -194,8 +194,8 @@ Do NOT output English sentences unless specifically asked to keep technical name
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": "llama-3.1-8b-instant",
-                    "max_tokens": 220,
+                    "model": "openai/gpt-oss-20b",
+                    "max_tokens": 512,
                     "temperature": 0.7,
                     "messages": [
                         {"role": "system", "content": system_prompt},
@@ -245,8 +245,8 @@ Input JSON:
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": "llama-3.1-8b-instant",
-                    "max_tokens": 600,
+                    "model": "openai/gpt-oss-20b",
+                    "max_tokens": 1024,
                     "temperature": 0.1,
                     "messages": [{"role": "user", "content": prompt}],
                 },
@@ -344,8 +344,8 @@ Give practical, concise advice in 2-4 sentences."""
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": "llama-3.1-8b-instant",
-                    "max_tokens": 300,
+                    "model": "openai/gpt-oss-20b",
+                    "max_tokens": 600,
                     "messages": [
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": message},
